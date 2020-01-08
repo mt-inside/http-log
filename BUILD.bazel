@@ -1,0 +1,9 @@
+# == nogo ==
+
+load("@io_bazel_rules_go//go:def.bzl", "nogo")
+
+nogo(
+    name = "my_nogo",
+    vet = True,
+    visibility = ["//visibility:public"],
+)
