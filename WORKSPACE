@@ -20,6 +20,26 @@ go_rules_dependencies()  # Dependencies for the toolchain and the rules' code it
 
 go_register_toolchains(nogo = "@//:my_nogo")  # Install a Golang toolchain into the sandbox
 
+# == Gazelle ==
+
+# Repo
+http_archive(
+    name = "bazel_gazelle",
+    urls = [
+        "https://storage.googleapis.com/bazel-mirror/github.com/bazelbuild/bazel-gazelle/releases/download/v0.19.1/bazel-gazelle-v0.19.1.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.19.1/bazel-gazelle-v0.19.1.tar.gz",
+    ],
+    sha256 = "86c6d481b3f7aedc1d60c1c211c6f76da282ae197c3b3160f54bd3a8f847896f",
+)
+
+# From that repo, load these macros
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
+
+gazelle_dependencies()  # Deps for the gazelle rules
+
+load("//:go_repos.bzl", "go_repositories")
+go_repositories()
+
 # == Docker ==
 
 # Load the rules' repo
