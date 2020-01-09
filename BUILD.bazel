@@ -1,3 +1,10 @@
+# == Gazelle ==
+
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/mt-inside/http-log
+gazelle(name = "gazelle")
+
 # == nogo ==
 
 load("@io_bazel_rules_go//go:def.bzl", "nogo")

@@ -5,7 +5,20 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	. "github.com/logrusorgru/aurora"
 )
+
+func getHeader(r *http.Request, h string) (ret string) {
+	hs := r.Header[h]
+	if len(hs) >= 1 {
+		ret = hs[0]
+	} else {
+		ret = fmt.Sprintf("<no %s>", h)
+	}
+
+	return
+}
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -15,8 +28,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to get body: %v", err)
 		}
-		fmt.Printf("%s %s %s%s\n", r.Proto, r.Method, r.Host, r.RequestURI)
-		fmt.Printf("%s: %d bytes / %s \n", r.Header["User-Agent"][0], r.ContentLength, r.Header["Content-Type"][0])
+		fmt.Printf("%s %s%s %s by %s\n", Green(r.Method), Cyan(r.Host), Cyan(r.RequestURI), Blue(r.Proto), Cyan(getHeader(r, "User-Agent")))
+		fmt.Printf("%d bytes of %s \n", Cyan(r.ContentLength), Cyan(getHeader(r, "Content-Type")))
 		fmt.Printf("%v\n", string(bs)) // assumes utf8
 		fmt.Println()
 	})
