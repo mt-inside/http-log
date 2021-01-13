@@ -28,7 +28,20 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to get body: %v", err)
 		}
-		fmt.Printf("%s %s%s %s by %s\n", Green(r.Method), Cyan(r.Host), Cyan(r.RequestURI), Blue(r.Proto), Cyan(getHeader(r, "User-Agent")))
+		fmt.Printf(
+			"%s %s:%s/%s#%s?%s %s by %s\n",
+			Green(r.Method),
+			Cyan(r.URL.Hostname()),
+			Cyan(r.URL.Port()),
+			Cyan(r.URL.EscapedPath()),
+			//Cyan(r.URL.EscapedFragment()),
+			"foo",
+			Cyan(r.URL.Query),
+			Blue(r.Proto),
+			Cyan(getHeader(r, "User-Agent")))
+		for k, v := range r.URL.Query() {
+			fmt.Printf("  %s => %s\n", k, v)
+		}
 		fmt.Printf("%d bytes of %s \n", Cyan(r.ContentLength), Cyan(getHeader(r, "Content-Type")))
 		fmt.Printf("%v\n", string(bs)) // assumes utf8
 		fmt.Println()
