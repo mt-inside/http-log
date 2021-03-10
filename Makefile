@@ -1,20 +1,27 @@
-.PHONY: build run test
-.DEFAULT_GOAL := build
+.PHONY: lint build run image image-push image-run
+.DEFAULT_GOAL := run
 
-build:
-	bazel run //:gazelle -- update-repos -prune=true -from_file=go.mod -to_macro=go_repos.bzl%go_repositories
-	bazel run //:gazelle
-	bazel build //...
+REPO ?= mtinside/http-log
+TAG ?= v0.5
 
-test:
-	bazel test --test_output=errors //...
+lint:
+	go fmt ./...
+	go vet ./...
+	golint ./...
+	golangci-lint run ./...
+	go test ./...
 
-run:
-	bazel run //cmd
+build: lint
+	go build -o http-log ./...
+
+run: lint
+	go run ./...
 
 image:
-	bazel build --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64 //cmd:image.tar
+	docker build -t $(REPO):$(TAG) .
 
-image-run-local: image
-	docker load -i bazel-bin/cmd/image.tar
-	docker run -p8080:8080 bazel/cmd:image
+image-push: image
+	docker push $(REPO):$(TAG)
+
+image-run: image
+	docker run -p8080:8080 $(REPO):$(TAG)
