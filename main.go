@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +44,7 @@ func main() {
 		HeadFull    bool   `short:"M" long:"head-fulll" description:"Print entire request head"`
 		BodySummary bool   `short:"b" long:"body" description:"Print truncated body"`
 		BodyFull    bool   `short:"B" long:"body-full" description:"Print full body"`
+		Output      string `short:"o" long:"output" description:"output format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
 	}
 
 	_, err := flags.Parse(&opts)
@@ -88,7 +91,25 @@ func main() {
 
 		/* Reply */
 
-		fmt.Fprintf(w, "Logged by http-log\n")
+		switch opts.Output {
+		case "none":
+		case "text":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			fmt.Fprintf(w, "Logged by http-log\n")
+		case "json":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]string{"logged": "ok", "by": "http-log"})
+		case "json-aws-api":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]interface{}{"statusCode": "200", "body": map[string]string{"logged": "ok", "by": "http-log"}})
+		case "xml":
+			w.Header().Set("Content-Type", "application/xml")
+			xml.NewEncoder(w).Encode(struct {
+				XMLName xml.Name `xml:"logged"`
+				Status  string
+				By      string
+			}{Status: "ok", By: "http-log"})
+		}
 	})
 
 	log.Info("http-log v0.5")
