@@ -131,7 +131,13 @@ func getHeader(r *http.Request, h string) (ret string, ok bool) {
 }
 
 func (o outputTty) headFull(log logr.Logger, r *http.Request) {
-	fmt.Printf("%s %s %s%s\n", Blue(r.Proto), Green(r.Method), Cyan(r.Host), Cyan(r.RequestURI))
+	fmt.Printf(
+		"%s %s %s%s\n",
+		Blue(r.Proto),
+		Green(r.Method),
+		Cyan(r.Host),
+		Cyan(r.URL.String()), // unless the request is in the weird proxy form or whatever, this will only contain a path; scheme, host etc will be empty
+	)
 	for k, v := range r.Header {
 		fmt.Printf("%s = %v\n", k, strings.Join(v, ","))
 	}
@@ -139,7 +145,13 @@ func (o outputTty) headFull(log logr.Logger, r *http.Request) {
 func (o outputTty) headSummary(log logr.Logger, r *http.Request) {
 	userAgent, _ := getHeader(r, "User-Agent")
 
-	fmt.Printf("%s %s %s%s by %s\n", Blue(r.Proto), Green(r.Method), Cyan(r.Host), Cyan(r.RequestURI), Cyan(userAgent))
+	fmt.Printf(
+		"%s %s %s by %s\n",
+		Blue(r.Proto),
+		Green(r.Method),
+		Cyan(r.URL.String()), // unless the request is in the weird proxy form or whatever, this will only contain a path; scheme, host etc will be empty
+		Cyan(userAgent),
+	)
 }
 func (o outputTty) bodyFull(log logr.Logger, r *http.Request, bs []byte) {
 	contentType, _ := getHeader(r, "Content-Type")
