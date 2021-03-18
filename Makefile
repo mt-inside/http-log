@@ -14,8 +14,12 @@ lint:
 build: lint
 	go build -o http-log ./...
 
+lambda: lint
+	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
+	zip http-log-lambda.zip http-log-lambda
+
 run: lint
-	go run ./...
+	go run ./cmd/daemon
 
 image:
 	docker build -t $(REPO):$(TAG) .
