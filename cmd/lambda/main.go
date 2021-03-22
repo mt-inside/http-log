@@ -11,10 +11,6 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-// Handle all these options somehow (api-gw, alb, etc)
-// - config, if we have to, but one deployment can be called in many ways, so ideally
-// - auto-detect. Maybe nested if's, checking one canary per "tier" of information at a time
-//   - two birds: presense of requestContext implies api-gw? Use to enable output envelope
 func HandleRequest(
 	ctx context.Context,
 	input map[string]interface{}, // TODO typing is hard in golang
@@ -23,7 +19,7 @@ func HandleRequest(
 	error, // TODO what happens if we set this?
 ) {
 	//return handleDump(ctx, input)
-	return handleApiGw(ctx, input)
+	return handleLog(ctx, input) // TODO split this into api-gw, alb etc. Take config for which one you're expecting, or ideall auto-detect it
 }
 
 func main() {
@@ -38,6 +34,7 @@ func getHeader(headers map[string]interface{}, key string) string {
 	}
 }
 
+// Dump mode. Can only be called by invoke api, as it doesn't reply with the envelope for eg api-gw
 //nolint:deadcode,unused
 func handleDump(
 	ctx context.Context,
@@ -46,8 +43,6 @@ func handleDump(
 	map[string]string,
 	error,
 ) {
-	// Dump mode. Can only be called by invoke api, as it doesn't reply with the envelope for eg api-gw
-	// TODO split into their own, typed, functions
 	lc, _ := lambdacontext.FromContext(ctx)
 	res := map[string]string{
 		"context": spew.Sdump(lc),
@@ -56,8 +51,7 @@ func handleDump(
 	return res, nil
 }
 
-// TODO: at least two paths - test invoke, and real
-func handleApiGw(
+func handleLog(
 	ctx context.Context,
 	input map[string]interface{}, // TODO typedef this in codec
 ) (
@@ -131,5 +125,5 @@ func handleApiGw(
 
 	res := map[string]string{"logged": "ok", "by": "http-log"}
 
-	return codec.AwsApiGwWrap(res), nil
+	return codec.AwsApiGwWrap(res), nil // TODO: shouldn't be taken on all paths
 }
