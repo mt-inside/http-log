@@ -4,65 +4,26 @@ import (
 	"context"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
+// Handle all these options somehow (api-gw, alb, etc)
+// - config, if we have to, but one deployment can be called in many ways, so ideally
+// - auto-detect. Maybe nested if's, checking one canary per "tier" of information at a time
+//   - two birds: presense of requestContext implies api-gw? Use to enable output envelope
 func HandleRequest(
 	ctx context.Context,
-	input map[string]interface{},
+	input map[string]interface{}, // TODO typing is hard in golang
 ) (
-	codec.AwsApiGwResponse,
-	error,
+	codec.AwsApiGwResponse, // TODO ditto typing
+	error, // TODO what happens if we set this?
 ) {
-	log := usvc.GetLogger(false)
-	op := output.NewTty(false)
-
-	requestContext := input["requestContext"].(map[string]interface{})
-
-	// input.headers is nil if there were no headers, like a test invoccation
-	// - NB: not the empty map, not a non-existant key
-	var headers map[string]interface{}
-	if input["headers"] == nil {
-		headers = map[string]interface{}{"User-Agent": "<none>"}
-	} else {
-		headers = input["headers"].(map[string]interface{})
-	}
-
-	/* Headers */
-
-	op.HeadSummary(
-		log,
-		requestContext["protocol"].(string),
-		requestContext["httpMethod"].(string),
-		input["path"].(string),
-		getHeader(headers, "User-Agent"),
-	)
-
-	/* Body */
-
-	var body, contentType string
-	if input["body"] == nil {
-		body = ""
-		contentType = "<n/a>"
-	} else {
-		body = input["body"].(string)
-		contentType = getHeader(headers, "content-type")
-	}
-
-	op.BodySummary(log, contentType, int64(len(body)), body)
-
-	/* Reply */
-
-	// lc, _ := lambdacontext.FromContext(ctx)
-	// res := map[string]string{
-	// 	"context": spew.Sdump(lc),
-	// 	"input":   spew.Sdump(input),
-	// }
-	res := map[string]string{"logged": "ok", "by": "http-log"}
-
-	return codec.AwsApiGwWrap(res), nil
+	//return handleDump(ctx, input)
+	return handleApiGw(ctx, input)
 }
 
 func main() {
@@ -70,8 +31,105 @@ func main() {
 }
 
 func getHeader(headers map[string]interface{}, key string) string {
-	if headers[key] == nil {
-		return "<no " + key + ">"
+	if val, ok := headers[key]; ok {
+		return val.(string) // TODO case insenstive match, cause it looks client-dependant
+	} else {
+		return "<not set>"
 	}
-	return headers[key].(string) // TODO case insenstive match, cause it looks client-dependant
+}
+
+//nolint:deadcode,unused
+func handleDump(
+	ctx context.Context,
+	input map[string]interface{},
+) (
+	map[string]string,
+	error,
+) {
+	// Dump mode. Can only be called by invoke api, as it doesn't reply with the envelope for eg api-gw
+	// TODO split into their own, typed, functions
+	lc, _ := lambdacontext.FromContext(ctx)
+	res := map[string]string{
+		"context": spew.Sdump(lc),
+		"input":   spew.Sdump(input),
+	}
+	return res, nil
+}
+
+// TODO: at least two paths - test invoke, and real
+func handleApiGw(
+	ctx context.Context,
+	input map[string]interface{}, // TODO typedef this in codec
+) (
+	codec.AwsApiGwResponse,
+	error, // TODO what happens if we set this?
+) {
+	log := usvc.GetLogger(false)
+	op := output.NewTty(false)
+
+	protocol := "<n/a>"
+	method := "<n/a>"
+	path := "<n/a>"
+	userAgent := "<n/a>"
+	contentType := "<n/a>"
+	body := ""
+
+	/* wot u see: TODO make MD table
+	* direct - context looks ok, input empty map
+	* api-gw test - input[headers] is nil (not non-existant, not empty map)
+	* - only if no headers supplied - can give a lot of params in the test console, this documents the minimum
+	* api-gw real client
+	 */
+
+	/* Calls from API-GW */
+	if _, ok := input["requestContext"]; ok {
+		path = input["path"].(string)
+
+		requestContext := input["requestContext"].(map[string]interface{})
+		protocol = requestContext["protocol"].(string)
+		method = requestContext["httpMethod"].(string)
+
+		/* api-gw indicates no headers with a present key, which maps to null.
+		* This is awful, so we replace that with a sentinel object */
+		var headers map[string]interface{}
+		if input["headers"] != nil {
+			headers = input["headers"].(map[string]interface{})
+		} else {
+			headers = map[string]interface{}{}
+		}
+
+		/* Call from API-GW by a real client (not a web console test invocation) */
+		userAgent = getHeader(headers, "User-Agent")
+
+		/* Call with a body */
+		if input["body"] != nil {
+			contentType = getHeader(headers, "content-type")
+			body = input["body"].(string)
+		}
+	}
+
+	/* Print Headers */
+
+	op.HeadSummary(
+		log,
+		protocol,
+		method,
+		path,
+		userAgent,
+	)
+
+	/* Print Body */
+
+	op.BodySummary(
+		log,
+		contentType,
+		int64(len(body)),
+		body,
+	)
+
+	/* Reply */
+
+	res := map[string]string{"logged": "ok", "by": "http-log"}
+
+	return codec.AwsApiGwWrap(res), nil
 }

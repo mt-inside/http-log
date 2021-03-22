@@ -2,6 +2,8 @@ package codec
 
 import "encoding/json"
 
+type AwsApiGwRequest map[string]interface{}
+
 type AwsApiGwResponse struct {
 	StatusCode int               `json:"statusCode"`
 	Headers    map[string]string `json:"headers"`
