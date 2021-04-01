@@ -19,7 +19,7 @@ func HandleRequest(
 	error, // TODO what happens if we set this?
 ) {
 	//return handleDump(ctx, input)
-	return handleLog(ctx, input) // TODO split this into api-gw, alb etc. Take config for which one you're expecting, or ideall auto-detect it
+	return handleLog(ctx, input) // TODO split this into api-gw, alb etc. Take config for which one you're expecting, or ideall auto-detect it. Note that it doesn't really make sense to cope with direct invokes, cause there really is no http data to log...
 }
 
 func main() {
@@ -125,5 +125,5 @@ func handleLog(
 
 	res := map[string]string{"logged": "ok", "by": "http-log"}
 
-	return codec.AwsApiGwWrap(res), nil // TODO: shouldn't be taken on all paths
+	return codec.AwsApiGwWrap(res), nil
 }
