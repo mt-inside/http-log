@@ -30,7 +30,7 @@ func main() {
 	var opts struct {
 		ListenAddr  string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 		HeadSummary bool   `short:"m" long:"head" description:"Print important header values"`
-		HeadFull    bool   `short:"M" long:"head-fulll" description:"Print entire request head"`
+		HeadFull    bool   `short:"M" long:"head-full" description:"Print entire request head"`
 		BodySummary bool   `short:"b" long:"body" description:"Print truncated body"`
 		BodyFull    bool   `short:"B" long:"body-full" description:"Print full body"`
 		Output      string `short:"o" long:"output" description:"output format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
