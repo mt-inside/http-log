@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/logrusorgru/aurora"
 
 	"github.com/go-logr/logr"
 )
+
+func getTimestamp() string {
+	return time.Now().Format("15:04:05")
+}
 
 type tty struct {
 	au aurora.Aurora
@@ -20,7 +25,8 @@ func NewTty(color bool) tty {
 
 func (o tty) HeadFull(log logr.Logger, r *http.Request) {
 	fmt.Printf(
-		"%s %s %s%s\n",
+		"%s %s %s %s%s\n",
+		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(r.Proto),
 		o.au.Green(r.Method),
 		o.au.Cyan(r.Host),
@@ -32,7 +38,8 @@ func (o tty) HeadFull(log logr.Logger, r *http.Request) {
 }
 func (o tty) HeadSummary(log logr.Logger, proto, method, path, ua string) {
 	fmt.Printf(
-		"%s %s %s by %s\n",
+		"%s %s %s %s by %s\n",
+		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(proto),
 		o.au.Green(method),
 		o.au.Cyan(path),
