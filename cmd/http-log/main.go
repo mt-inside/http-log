@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/mattn/go-isatty"
@@ -83,6 +84,12 @@ func main() {
 
 		/* Reply */
 
+		// TODO:
+		// - turn into getReply(), used by all these and the lambda
+		// - config option to add arbitrary pair to it
+		// - config option to en/disable the timestamp
+		body := map[string]string{"logged": "ok", "by": "http-log", "at": time.Now().Format(time.RFC3339Nano)}
+
 		var err error
 		switch opts.Output {
 		case "none":
@@ -91,17 +98,17 @@ func main() {
 			fmt.Fprintf(w, "Logged by http-log\n")
 		case "json":
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			err = json.NewEncoder(w).Encode(map[string]string{"logged": "ok", "by": "http-log"})
+			err = json.NewEncoder(w).Encode(body)
 		case "json-aws-api":
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			err = json.NewEncoder(w).Encode(codec.AwsApiGwWrap(map[string]string{"logged": "ok", "by": "http-log"}))
+			err = json.NewEncoder(w).Encode(codec.AwsApiGwWrap(body))
 		case "xml":
 			w.Header().Set("Content-Type", "application/xml")
 			err = xml.NewEncoder(w).Encode(struct {
-				XMLName xml.Name `xml:"logged"`
-				Status  string
+				XMLName xml.Name `xml:"status"`
+				Logged  string
 				By      string
-			}{Status: "ok", By: "http-log"})
+			}{Logged: "ok", By: "http-log"})
 		}
 		if err != nil {
 			panic(err)
