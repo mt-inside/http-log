@@ -38,8 +38,8 @@ var tmpCa *tls.Certificate
 type outputter interface {
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
-	HeadSummary(log logr.Logger, proto, method, path, host, ua string)
-	HeadFull(log logr.Logger, r *http.Request)
+	HeadSummary(log logr.Logger, proto, method, path, host, ua string, respCode int)
+	HeadFull(log logr.Logger, r *http.Request, respCode int)
 	BodySummary(log logr.Logger, contentType string, contentLength int64, body string)
 	BodyFull(log logr.Logger, contentType string, r *http.Request, body string)
 }
@@ -113,10 +113,10 @@ func main() {
 
 		userAgent, _ := getHeader(r, "User-Agent")
 		if opts.HeadFull {
-			op.HeadFull(log, r)
+			op.HeadFull(log, r, opts.Status)
 		} else if opts.HeadSummary {
 			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			op.HeadSummary(log, r.Proto, r.Method, r.Host, r.URL.String(), userAgent)
+			op.HeadSummary(log, r.Proto, r.Method, r.Host, r.URL.String(), userAgent, opts.Status)
 		}
 
 		/* Body */
