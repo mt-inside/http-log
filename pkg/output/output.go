@@ -1,21 +1,17 @@
 package output
 
-import (
-	"net/http"
-
-	"github.com/go-logr/logr"
-)
-
-type Output interface {
-	HeadSummary(log logr.Logger, proto, method, path, ua string)
-	HeadFull(log logr.Logger, r *http.Request)
-	BodySummary(log logr.Logger, contentType string, contentLength int64, body string)
-	BodyFull(log logr.Logger, contentType string, r *http.Request, body string)
-}
+import "crypto/tls"
 
 func min(x, y int) int {
 	if x < y {
 		return x
 	}
 	return y
+}
+
+var tlsVersionName = map[uint16]string{
+	tls.VersionTLS10: "1.0",
+	tls.VersionTLS11: "1.1",
+	tls.VersionTLS12: "1.2",
+	tls.VersionTLS13: "1.3",
 }

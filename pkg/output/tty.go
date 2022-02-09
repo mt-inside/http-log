@@ -1,6 +1,7 @@
 package output
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,25 +24,43 @@ func NewTty(color bool) tty {
 	return tty{aurora.NewAurora(color)}
 }
 
+func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
+	fmt.Printf("TLS ver %s cypher %s SNI %s ALPN:proto %s\n",
+		tlsVersionName[cs.Version],
+		tls.CipherSuiteName(cs.CipherSuite),
+		cs.ServerName,
+		cs.NegotiatedProtocol,
+	)
+}
+
+func (o tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
+	fmt.Printf("TLS ver %s SNI %s ALPN:proto %s\n",
+		tlsVersionName[cs.Version],
+		cs.ServerName,
+		cs.NegotiatedProtocol,
+	)
+}
+
 func (o tty) HeadFull(log logr.Logger, r *http.Request) {
 	fmt.Printf(
-		"%s %s %s %s%s\n",
+		"%s %s %s %s %s\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(r.Proto),
 		o.au.Green(r.Method),
-		o.au.Cyan(r.Host),
+		o.au.Red(r.Host),
 		o.au.Cyan(r.URL.String()), // unless the request is in the weird proxy form or whatever, this will only contain a path; scheme, host etc will be empty
 	)
 	for k, v := range r.Header {
 		fmt.Printf("%s = %v\n", k, strings.Join(v, ","))
 	}
 }
-func (o tty) HeadSummary(log logr.Logger, proto, method, path, ua string) {
+func (o tty) HeadSummary(log logr.Logger, proto, method, host, path, ua string) {
 	fmt.Printf(
-		"%s %s %s %s by %s\n",
+		"%s %s %s %s %s by %s\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(proto),
 		o.au.Green(method),
+		o.au.Red(host),
 		o.au.Cyan(path),
 		o.au.Cyan(ua),
 	)

@@ -108,6 +108,7 @@ func handleLog(
 		log,
 		protocol,
 		method,
+		"TODO host",
 		path,
 		userAgent,
 	)
