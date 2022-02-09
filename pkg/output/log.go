@@ -16,16 +16,17 @@ func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 	log.Info("Transport", "SNI", cs.ServerName)
 }
 
-func (o Log) HeadFull(log logr.Logger, r *http.Request) {
+func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 	log.Info("Header", "Name", "proto", "Values", r.Proto)
 	log.Info("Header", "Name", "method", "Values", r.Method)
 	log.Info("Header", "Name", "host", "Values", r.Host)
 	log.Info("Header", "Name", "path", "Values", r.RequestURI)
+	log.Info("Header", "Name", "response-code", "Value", respCode)
 	for k, v := range r.Header {
 		log.Info("Header", "Name", k, "Values", v)
 	}
 }
-func (o Log) HeadSummary(log logr.Logger, proto, method, path, host, ua string) {
+func (o Log) HeadSummary(log logr.Logger, proto, method, path, host, ua string, respCode int) {
 	log.Info(
 		"Headers summary",
 		"proto", proto,
@@ -33,6 +34,7 @@ func (o Log) HeadSummary(log logr.Logger, proto, method, path, host, ua string) 
 		"host", host,
 		"path", path,
 		"user-agent", ua,
+		"response-code", respCode,
 	)
 }
 
