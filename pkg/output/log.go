@@ -1,12 +1,20 @@
 package output
 
 import (
+	"crypto/tls"
 	"net/http"
 
 	"github.com/go-logr/logr"
 )
 
 type Log struct{}
+
+func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
+	log.Info("Transport", "SNI", cs.ServerName)
+}
+func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
+	log.Info("Transport", "SNI", cs.ServerName)
+}
 
 func (o Log) HeadFull(log logr.Logger, r *http.Request) {
 	log.Info("Header", "Name", "proto", "Values", r.Proto)
@@ -17,15 +25,17 @@ func (o Log) HeadFull(log logr.Logger, r *http.Request) {
 		log.Info("Header", "Name", k, "Values", v)
 	}
 }
-func (o Log) HeadSummary(log logr.Logger, proto, method, path, ua string) {
+func (o Log) HeadSummary(log logr.Logger, proto, method, path, host, ua string) {
 	log.Info(
 		"Headers summary",
 		"proto", proto,
 		"method", method,
+		"host", host,
 		"path", path,
 		"user-agent", ua,
 	)
 }
+
 func (o Log) BodyFull(log logr.Logger, contentType string, r *http.Request, bs string) {
 	log.Info("Body",
 		"len", r.ContentLength,
