@@ -25,17 +25,20 @@ func NewTty(color bool) tty {
 }
 
 func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	fmt.Printf("TLS ver %s cypher %s SNI %s ALPN:proto %s\n",
-		tlsVersionName[cs.Version],
-		tls.CipherSuiteName(cs.CipherSuite),
+	fmt.Printf("%s SNI %s ALPN proto %s\n",
+		tlsVersionName(cs.Version),
 		cs.ServerName,
 		cs.NegotiatedProtocol,
 	)
+
+	// TODO add client cert if present, using routines from lb-checker
+	// TODO and other stuff from there like cipher suite
 }
 
 func (o tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
-	fmt.Printf("TLS ver %s SNI %s ALPN:proto %s\n",
-		tlsVersionName[cs.Version],
+	// TODO use pretty-print from checktls2 in lb-checker
+	fmt.Printf("%s SNI %s ALPN proto %s\n",
+		tlsVersionName(cs.Version),
 		cs.ServerName,
 		cs.NegotiatedProtocol,
 	)
