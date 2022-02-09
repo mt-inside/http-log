@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"os"
 	"time"
@@ -32,6 +31,9 @@ import (
 *   fragment
 *   query (one line in summary, spell out k/v in full)
  */
+
+// TODO!!
+var tmpCa *tls.Certificate
 
 type outputter interface {
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
@@ -54,9 +56,6 @@ func logMiddle(h http.Handler) http.Handler {
 }
 
 func main() {
-	// TODO: make a CA and serving cert, use that to serve TLS: https://medium.com/@shaneutt/create-sign-x509-certificates-in-golang-8ac4ae49f903
-	// TODO: dynamic SNI - whatever SNI name comes in, mint a cert for it, see if netscaler monitor is happy to talk to it now
-	// * will mean intercepting TLS handshake somehow? Google dynamic SNI golang. Assume we have to make a TLS listener, fuck about with that, then hand the socket off to ServeHTTP
 
 	log := usvc.GetLogger(false)
 
@@ -187,30 +186,26 @@ func main() {
 
 	log.Info("Listening", "addr", opts.ListenAddr)
 	if opts.Tls {
-		certPair, err := makeSelfSignedServingCertPair()
+		caPair, err := genSelfSignedCa()
 		if err != nil {
 			panic(err)
 		}
-		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*certPair}}
+		tmpCa = caPair // TODO!
+		srv.TLSConfig = &tls.Config{
+			GetCertificate: genServingCert,
+		}
 		log.Error(srv.ListenAndServeTLS("", ""), "Shutting down")
 	} else {
 		log.Error(srv.ListenAndServe(), "Shutting down")
 	}
 }
 
-func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
-
-	/* CA */
+func genSelfSignedCa() (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			Organization:  []string{"Company, INC."},
-			Country:       []string{"US"},
-			Province:      []string{""},
-			Locality:      []string{"San Francisco"},
-			StreetAddress: []string{"Golden Gate Bridge"},
-			PostalCode:    []string{"94016"},
+			CommonName: "http-log self-signed ca",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
@@ -220,12 +215,13 @@ func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	caKeyBytes, err := rsa.GenerateKey(rand.Reader, 4096)
+	// TODO: change to ECDSA. Not least it's orders of mangnitues faster.
+	caKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, err
 	}
 
-	caCertBytes, err := x509.CreateCertificate(rand.Reader, caSettings, caSettings, &caKeyBytes.PublicKey, caKeyBytes)
+	caCertBytes, err := x509.CreateCertificate(rand.Reader, caSettings, caSettings, &caKey.PublicKey, caKey)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +229,7 @@ func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
 	caKeyPem := new(bytes.Buffer)
 	pem.Encode(caKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(caKeyBytes),
+		Bytes: x509.MarshalPKCS1PrivateKey(caKey),
 	})
 
 	caCertPem := new(bytes.Buffer)
@@ -242,32 +238,41 @@ func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
 		Bytes: caCertBytes,
 	})
 
-	/* Serving Certificate  */
+	caPair, err := tls.X509KeyPair(caCertPem.Bytes(), caKeyPem.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	return &caPair, nil
+}
+
+func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
+
+	dnsName := "localhost"
+	if helloInfo.ServerName != "" {
+		dnsName = helloInfo.ServerName
+	}
 
 	servingSettings := &x509.Certificate{
 		SerialNumber: big.NewInt(1658),
 		Subject: pkix.Name{
-			Organization:  []string{"Company, INC."},
-			Country:       []string{"US"},
-			Province:      []string{""},
-			Locality:      []string{"San Francisco"},
-			StreetAddress: []string{"Golden Gate Bridge"},
-			PostalCode:    []string{"94016"},
+			CommonName: "http-log",
 		},
-		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		DNSNames:     []string{dnsName},
 		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(10, 0, 0),
+		NotAfter:     time.Now().AddDate(0, 0, 1),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	servingKeyBytes, err := rsa.GenerateKey(rand.Reader, 4096)
+	servingKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, err
 	}
 
-	servingCertBytes, err := x509.CreateCertificate(rand.Reader, servingSettings, caSettings, &servingKeyBytes.PublicKey, caKeyBytes)
+	caCert, _ := x509.ParseCertificate(tmpCa.Certificate[0]) // annoyingly the call to x509.CreateCertificate() gives us []byte, not a typed object, so that's what ends up in the tls.Certificate we have in hand here. That does have a typed .Leaf, but it's lazy-generated
+	servingCertBytes, err := x509.CreateCertificate(rand.Reader, servingSettings, caCert, &servingKey.PublicKey, tmpCa.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +280,7 @@ func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
 	servingKeyPem := new(bytes.Buffer)
 	pem.Encode(servingKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(servingKeyBytes),
+		Bytes: x509.MarshalPKCS1PrivateKey(servingKey),
 	})
 
 	servingCertPem := new(bytes.Buffer)
