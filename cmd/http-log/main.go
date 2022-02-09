@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -26,6 +28,8 @@ import (
 )
 
 /* TODO:
+* print all possible in the http.Server and tls.Config callbacks - just L7 stuff in the http handler
+* combine code with lb-checker - stuff to render certs, tls.connectionstate, etc
 * if present, print
 *   credentials
 *   fragment
@@ -182,6 +186,16 @@ func main() {
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  120 * time.Second,
 		Handler:      loggingMux,
+		ConnState:    func(c net.Conn, cs http.ConnState) { fmt.Println("Http server connection state change to", cs) },
+		BaseContext: func(l net.Listener) context.Context {
+			fmt.Println("Http server connection accepted, TODO print interesting listener info")
+			return context.Background()
+		},
+		// TODO masks the calling of BaseContext?
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			fmt.Println("Http server connection established (?), TODO print interesting conn info")
+			return ctx
+		},
 	}
 
 	log.Info("Listening", "addr", opts.ListenAddr)
@@ -193,6 +207,18 @@ func main() {
 		tmpCa = caPair // TODO!
 		srv.TLSConfig = &tls.Config{
 			GetCertificate: genServingCert,
+			GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+				fmt.Println("ClientHello received, config change hook")
+				return nil, nil
+			},
+			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+				fmt.Println("Built-in cert verification finished, extra verification hook")
+				return nil
+			},
+			VerifyConnection: func(tls.ConnectionState) error {
+				fmt.Println("All cert verification finished, final connection validation hook")
+				return nil
+			},
 		}
 		log.Error(srv.ListenAndServeTLS("", ""), "Shutting down")
 	} else {
@@ -215,7 +241,7 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	// TODO: change to ECDSA. Not least it's orders of mangnitues faster.
+	// TODO: change to ECDSA. Not least it's orders of mangnitues faster. Cache them by ServerName
 	caKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, err
@@ -247,6 +273,8 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 }
 
 func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
+
+	fmt.Println("Http get serving cert callback")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
