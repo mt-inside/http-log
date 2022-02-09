@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -69,7 +77,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
+	if !opts.TransportSummary && !opts.TransportFull && !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
 	}
 
@@ -179,10 +187,109 @@ func main() {
 
 	log.Info("Listening", "addr", opts.ListenAddr)
 	if opts.Tls {
-		log.Error(srv.ListenAndServeTLS("server.crt", "server.key"), "Shutting down")
+		certPair, err := makeSelfSignedServingCertPair()
+		if err != nil {
+			panic(err)
+		}
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*certPair}}
+		log.Error(srv.ListenAndServeTLS("", ""), "Shutting down")
 	} else {
 		log.Error(srv.ListenAndServe(), "Shutting down")
 	}
+}
+
+func makeSelfSignedServingCertPair() (*tls.Certificate, error) {
+
+	/* CA */
+
+	caSettings := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
+		Subject: pkix.Name{
+			Organization:  []string{"Company, INC."},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"San Francisco"},
+			StreetAddress: []string{"Golden Gate Bridge"},
+			PostalCode:    []string{"94016"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+
+	caKeyBytes, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, err
+	}
+
+	caCertBytes, err := x509.CreateCertificate(rand.Reader, caSettings, caSettings, &caKeyBytes.PublicKey, caKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	caKeyPem := new(bytes.Buffer)
+	pem.Encode(caKeyPem, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(caKeyBytes),
+	})
+
+	caCertPem := new(bytes.Buffer)
+	pem.Encode(caCertPem, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caCertBytes,
+	})
+
+	/* Serving Certificate  */
+
+	servingSettings := &x509.Certificate{
+		SerialNumber: big.NewInt(1658),
+		Subject: pkix.Name{
+			Organization:  []string{"Company, INC."},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"San Francisco"},
+			StreetAddress: []string{"Golden Gate Bridge"},
+			PostalCode:    []string{"94016"},
+		},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().AddDate(10, 0, 0),
+		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+
+	servingKeyBytes, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, err
+	}
+
+	servingCertBytes, err := x509.CreateCertificate(rand.Reader, servingSettings, caSettings, &servingKeyBytes.PublicKey, caKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	servingKeyPem := new(bytes.Buffer)
+	pem.Encode(servingKeyPem, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(servingKeyBytes),
+	})
+
+	servingCertPem := new(bytes.Buffer)
+	pem.Encode(servingCertPem, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: servingCertBytes,
+	})
+
+	certPair, err := tls.X509KeyPair(servingCertPem.Bytes(), servingKeyPem.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	return &certPair, nil
 }
 
 func getHeader(r *http.Request, h string) (ret string, ok bool) {
