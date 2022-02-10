@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -65,7 +66,7 @@ func logMiddle(h http.Handler) http.Handler {
 
 var opts struct {
 	ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	TlsAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	TlsAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 	TransportSummary bool   `short:"t" long:"transport" description:"Print important transport (eg TLS) parameters"`
 	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all transport (eg TLS) parameters"`
 	HeadSummary      bool   `short:"m" long:"head" description:"Print important header values"`
@@ -237,11 +238,11 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 
 	// TODO: Cache them by ServerName
 
-	var parentSettings *x509.Certificate
-	var parentKey crypto.PrivateKey
+	var signerSettings *x509.Certificate
+	var signerKey crypto.PrivateKey
 	if parent != nil {
-		parentSettings, _ = x509.ParseCertificate(parent.Certificate[0]) // annoyingly the call to x509.CreateCertificate() gives us []byte, not a typed object, so that's what ends up in the tls.Certificate we have in hand here. That does have a typed .Leaf, but it's lazy-generated
-		parentKey = parent.PrivateKey
+		signerSettings, _ = x509.ParseCertificate(parent.Certificate[0]) // annoyingly the call to x509.CreateCertificate() gives us []byte, not a typed object, so that's what ends up in the tls.Certificate we have in hand here. That does have a typed .Leaf, but it's lazy-generated
+		signerKey = parent.PrivateKey
 	}
 
 	keyPem := new(bytes.Buffer)
@@ -261,11 +262,11 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 
 		// Self-signing?
 		if parent == nil {
-			parentKey = key
-			parentSettings = settings
+			signerKey = key
+			signerSettings = settings
 		}
 
-		certBytes, err = x509.CreateCertificate(rand.Reader, settings, parentSettings, &key.PublicKey, parentKey)
+		certBytes, err = x509.CreateCertificate(rand.Reader, settings, signerSettings, &key.PublicKey, signerKey)
 		if err != nil {
 			return nil, err
 		}
@@ -284,16 +285,37 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 
 		// Self-signing?
 		if parent == nil {
-			parentKey = key
-			parentSettings = settings
+			signerKey = key
+			signerSettings = settings
 		}
 
-		certBytes, err = x509.CreateCertificate(rand.Reader, settings, parentSettings, &key.PublicKey, parentKey)
+		certBytes, err = x509.CreateCertificate(rand.Reader, settings, signerSettings, &key.PublicKey, signerKey)
 		if err != nil {
 			return nil, err
 		}
 
-	// TODO: add ed25519
+	case "ed25519":
+		pubKey, key, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytes, _ := x509.MarshalPKCS8PrivateKey(key)
+		pem.Encode(keyPem, &pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: keyBytes,
+		})
+
+		// Self-signing?
+		if parent == nil {
+			signerKey = key
+			signerSettings = settings
+		}
+
+		certBytes, err = x509.CreateCertificate(rand.Reader, settings, signerSettings, pubKey, signerKey)
+		if err != nil {
+			return nil, err
+		}
 
 	default:
 		panic(errors.New("bottom"))
