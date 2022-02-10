@@ -189,12 +189,11 @@ func main() {
 		Handler:      loggingMux,
 		ConnState:    func(c net.Conn, cs http.ConnState) { fmt.Println("Http server connection state change to", cs) },
 		BaseContext: func(l net.Listener) context.Context {
-			fmt.Println("Http server connection accepted, TODO print interesting listener info")
+			fmt.Println("Http server listening, TODO print interesting listener info")
 			return context.Background()
 		},
-		// TODO masks the calling of BaseContext?
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			fmt.Println("Http server connection established (?), TODO print interesting conn info")
+			fmt.Println("Http server connection accepted, TODO print interesting conn info")
 			return ctx
 		},
 	}
