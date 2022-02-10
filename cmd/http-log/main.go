@@ -41,9 +41,6 @@ import (
 *   query (one line in summary, spell out k/v in full)
  */
 
-// TODO!!
-var tmpCa *tls.Certificate
-
 type outputter interface {
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
@@ -55,13 +52,44 @@ type outputter interface {
 
 var requestNo uint
 
-func logMiddle(h http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r)
+type logMiddle struct {
+	log    logr.Logger
+	next   http.Handler
+	output outputter
+	caPair *tls.Certificate
+}
 
-		// TODO move logging in here
+func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	/* Headers */
+
+	userAgent, _ := getHeader(r, "User-Agent")
+	if opts.HeadFull {
+		lm.output.HeadFull(lm.log, r, opts.Status)
+	} else if opts.HeadSummary {
+		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+		lm.output.HeadSummary(lm.log, r.Proto, r.Method, r.Host, r.URL.String(), userAgent, opts.Status)
 	}
-	return http.HandlerFunc(fn)
+
+	/* Body */
+
+	contentType, _ := getHeader(r, "Content-Type")
+	if opts.BodyFull || opts.BodySummary {
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			lm.log.Error(err, "failed to get body")
+		}
+
+		if opts.BodyFull {
+			lm.output.BodyFull(lm.log, contentType, r, string(bs))
+		} else if opts.BodySummary {
+			lm.output.BodySummary(lm.log, contentType, r.ContentLength, string(bs))
+		}
+	}
+
+	/* Next */
+
+	lm.next.ServeHTTP(w, r)
 }
 
 var opts struct {
@@ -89,7 +117,7 @@ func main() {
 		opts.HeadSummary = true
 	}
 
-	log.Info("TLS", "on", opts.TlsAlgo != "off", "algo", opts.TlsAlgo)
+	log.Info("http-log v0.5")
 
 	var op outputter
 	if isatty.IsTerminal(os.Stdout.Fd()) {
@@ -100,53 +128,10 @@ func main() {
 
 	/*
 		TODO
-		* make this do dynamic certs based on a given / self-gen'd root key - will need to intercept the transport layer socket accept?
-		* make a client that prints (in color) http server details - canonical DNS name, ip, cert details inc sans, server header, ALPN details
+		* make a client that prints (in color) http server details - canonical DNS name, ip, cert details inc sans, server header, ALPN details, based on print-cert
 	*/
 
-	// TODO make a struct with this method on, and op, opts in its fields
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		log := log.WithValues("Request", requestNo)
-		requestNo++ // Think everything is single-threaded...
-
-		/* Transport */
-
-		if r.TLS != nil {
-			if opts.TransportFull {
-				op.TransportFull(log, r.TLS)
-			} else if opts.TransportSummary {
-				// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-				op.TransportSummary(log, r.TLS)
-			}
-		}
-
-		/* Headers */
-
-		userAgent, _ := getHeader(r, "User-Agent")
-		if opts.HeadFull {
-			op.HeadFull(log, r, opts.Status)
-		} else if opts.HeadSummary {
-			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			op.HeadSummary(log, r.Proto, r.Method, r.Host, r.URL.String(), userAgent, opts.Status)
-		}
-
-		/* Body */
-
-		contentType, _ := getHeader(r, "Content-Type")
-		if opts.BodyFull || opts.BodySummary {
-			bs, err := io.ReadAll(r.Body)
-			if err != nil {
-				log.Error(err, "failed to get body")
-			}
-
-			if opts.BodyFull {
-				op.BodyFull(log, contentType, r, string(bs))
-			} else if opts.BodySummary {
-				op.BodySummary(log, contentType, r.ContentLength, string(bs))
-			}
-		}
-
-		/* Reply */
 
 		w.WriteHeader(opts.Status)
 
@@ -181,11 +166,20 @@ func main() {
 		}
 	}
 
-	log.Info("http-log v0.5")
-
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", handler)
-	loggingMux := logMiddle(mux)
+	loggingMux := &logMiddle{
+		log:    log,
+		next:   mux,
+		output: op,
+	}
+
+	if opts.TlsAlgo != "off" {
+		loggingMux.caPair, err = genSelfSignedCa()
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	srv := &http.Server{
 		Addr:         opts.ListenAddr,
@@ -193,38 +187,47 @@ func main() {
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  120 * time.Second,
 		Handler:      loggingMux,
-		ConnState: func(c net.Conn, cs http.ConnState) {
-			log.Info("Hook", "Event", "Http server connection state change", "State", cs)
-		},
 		BaseContext: func(l net.Listener) context.Context {
-			log.Info("Hook", "Event", "Http server listening", "TODO", "print interesting listener info")
+			switch l.(type) {
+			case *net.TCPListener:
+				log.Info("Hook", "Event", "HTTP server listening", "Addr", l.Addr(), "security", "plaintext")
+			default: // *tls.listener
+				log.Info("Hook", "Event", "HTTP server listening", "Addr", l.Addr(), "security", "tls", "algo", opts.TlsAlgo)
+			}
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			log.Info("Hook", "Event", "Http server connection accepted", "TODO", "print interesting conn info")
+			requestNo++ // Think everything is single-threaded...
+			log.Info("Hook", "Event", "L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
+
 			return ctx
+		},
+		ConnState: func(c net.Conn, cs http.ConnState) {
+			log.Info("Hook", "Event", "HTTP server connection state change", "State", cs)
 		},
 	}
 
-	log.Info("Listening", "addr", opts.ListenAddr)
 	if opts.TlsAlgo != "off" {
-		caPair, err := genSelfSignedCa()
-		if err != nil {
-			panic(err)
-		}
-		tmpCa = caPair // TODO!
 		srv.TLSConfig = &tls.Config{
-			GetCertificate: genServingCert,
+			GetCertificate: loggingMux.genServingCert,
 			GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-				log.Info("Hook", "Event", "Tls ClientHello received", "TODO", "Print some TLS info here - in full mode, interesting to see what the peer offered")
+				log.Info("Hook", "Event", "TLS ClientHello received", "TODO", "Print some TLS info here - in full mode, interesting to see what the peer offered")
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				log.Info("Hook", "Event", "Built-in cert verification finished")
+				log.Info("Hook", "Event", "TLS built-in cert verification finished")
 				return nil // can do extra cert verification and reject
 			},
-			VerifyConnection: func(tls.ConnectionState) error {
-				log.Info("Hook", "Event", "All cert verification finished", "TODO", "Print negotiated TLS info here")
+			VerifyConnection: func(cs tls.ConnectionState) error {
+				log.Info("Hook", "Event", "TLS: all cert verification finished")
+
+				if opts.TransportFull {
+					op.TransportFull(log, &cs)
+				} else if opts.TransportSummary {
+					// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+					op.TransportSummary(log, &cs)
+				}
+
 				return nil // can inspect all connection and TLS info and reject
 			},
 		}
@@ -355,9 +358,9 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 	return genCertPair(caSettings, nil)
 }
 
-func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 
-	//log.Info("Hook", "Event", "Tls get serving cert callback") TODO - need some DI or a class to be a member of - this uses tmpCa too, and needs Opts to give to genCertPair()
+	lm.log.Info("Hook", "Event", "TLS: get serving cert callback")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
@@ -377,7 +380,7 @@ func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return genCertPair(servingSettings, tmpCa)
+	return genCertPair(servingSettings, lm.caPair)
 }
 
 func getHeader(r *http.Request, h string) (ret string, ok bool) {
