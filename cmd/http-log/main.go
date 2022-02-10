@@ -39,6 +39,7 @@ import (
  */
 
 type outputter interface {
+	TLSNegFull(log logr.Logger, cs *tls.ClientHelloInfo)
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
 	HeadSummary(log logr.Logger, proto, method, path, host, ua string, respCode int)
@@ -180,8 +181,13 @@ func main() {
 	if opts.TlsAlgo != "off" {
 		srv.TLSConfig = &tls.Config{
 			GetCertificate: loggingMux.genServingCert,
-			GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-				log.Info("Hook", "Event", "TLS ClientHello received", "TODO", "Print some TLS info here - in full mode, interesting to see what the peer offered")
+			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
+				log.Info("Hook", "Event", "TLS ClientHello received")
+
+				if opts.TransportFull {
+					op.TLSNegFull(log, hi)
+				}
+
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {

@@ -9,6 +9,10 @@ import (
 
 type Log struct{}
 
+func (o Log) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
+	log.Info("Transport", "TLS client supported versions", renderTlsVersionNames(hi.SupportedVersions))
+	log.Info("Transport", "TLS client supported ALPN protocols", hi.SupportedProtos)
+}
 func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 	log.Info("Transport", "SNI", cs.ServerName)
 }

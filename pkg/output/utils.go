@@ -21,6 +21,16 @@ func tlsVersionName(tlsVersion uint16) string {
 	}
 }
 
+func renderTlsVersionNames(vs []uint16) []string {
+	var ss []string
+
+	for _, v := range vs {
+		ss = append(ss, tlsVersionName(v))
+	}
+
+	return ss
+}
+
 func min(x, y int) int {
 	if x < y {
 		return x
