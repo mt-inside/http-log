@@ -192,13 +192,15 @@ func main() {
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  120 * time.Second,
 		Handler:      loggingMux,
-		ConnState:    func(c net.Conn, cs http.ConnState) { fmt.Println("Http server connection state change to", cs) },
+		ConnState: func(c net.Conn, cs http.ConnState) {
+			log.Info("Hook", "Event", "Http server connection state change", "State", cs)
+		},
 		BaseContext: func(l net.Listener) context.Context {
-			fmt.Println("Http server listening, TODO print interesting listener info")
+			log.Info("Hook", "Event", "Http server listening", "TODO", "print interesting listener info")
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			fmt.Println("Http server connection accepted, TODO print interesting conn info")
+			log.Info("Hook", "Event", "Http server connection accepted", "TODO", "print interesting conn info")
 			return ctx
 		},
 	}
@@ -213,16 +215,16 @@ func main() {
 		srv.TLSConfig = &tls.Config{
 			GetCertificate: genServingCert,
 			GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
-				fmt.Println("ClientHello received, config change hook")
-				return nil, nil
+				log.Info("Hook", "Event", "Tls ClientHello received", "TODO", "Print some TLS info here - in full mode, interesting to see what the peer offered")
+				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				fmt.Println("Built-in cert verification finished, extra verification hook")
-				return nil
+				log.Info("Hook", "Event", "Built-in cert verification finished")
+				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(tls.ConnectionState) error {
-				fmt.Println("All cert verification finished, final connection validation hook")
-				return nil
+				log.Info("Hook", "Event", "All cert verification finished", "TODO", "Print negotiated TLS info here")
+				return nil // can inspect all connection and TLS info and reject
 			},
 		}
 		log.Error(srv.ListenAndServeTLS("", ""), "Shutting down")
@@ -333,7 +335,7 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 
 func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 
-	fmt.Println("Http get serving cert callback")
+	//log.Info("Hook", "Event", "Tls get serving cert callback") TODO - need some DI or a class to be a member of - this uses tmpCa too, and needs Opts to give to genCertPair()
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
