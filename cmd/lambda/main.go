@@ -11,6 +11,10 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
+const (
+	respCode = 200
+)
+
 func HandleRequest(
 	ctx context.Context,
 	input map[string]interface{}, // TODO typing is hard in golang
@@ -111,6 +115,7 @@ func handleLog(
 		"TODO host",
 		path,
 		userAgent,
+		respCode,
 	)
 
 	/* Print Body */
@@ -124,7 +129,5 @@ func handleLog(
 
 	/* Reply */
 
-	res := map[string]string{"logged": "ok", "by": "http-log"}
-
-	return codec.AwsApiGwWrap(res), nil
+	return codec.AwsApiGwWrap(respCode, codec.GetBody()), nil
 }

@@ -11,14 +11,14 @@ type AwsApiGwResponse struct {
 	Body       string            `json:"body"`
 }
 
-func AwsApiGwWrap(body interface{}) AwsApiGwResponse {
+func AwsApiGwWrap(respCode int, body interface{}) AwsApiGwResponse {
 	bodyJson, err := json.Marshal(body)
 	if err != nil {
 		panic(err)
 	}
 
 	return AwsApiGwResponse{
-		200,
+		respCode,
 		map[string]string{},
 		false,
 		string(bodyJson),
