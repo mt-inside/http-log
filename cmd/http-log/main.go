@@ -3,8 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -241,8 +242,8 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	// TODO: change to ECDSA. Not least it's orders of mangnitues faster. Cache them by ServerName
-	caKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	// TODO: Cache them by ServerName
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -252,10 +253,11 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 		return nil, err
 	}
 
+	caKeyBytes, _ := x509.MarshalECPrivateKey(caKey)
 	caKeyPem := new(bytes.Buffer)
 	pem.Encode(caKeyPem, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(caKey),
+		Type:  "ECDSA PRIVATE KEY",
+		Bytes: caKeyBytes,
 	})
 
 	caCertPem := new(bytes.Buffer)
@@ -294,7 +296,7 @@ func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	servingKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	servingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +307,11 @@ func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		return nil, err
 	}
 
+	servingKeyBytes, _ := x509.MarshalECPrivateKey(servingKey)
 	servingKeyPem := new(bytes.Buffer)
 	pem.Encode(servingKeyPem, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(servingKey),
+		Type:  "ECDSA PRIVATE KEY",
+		Bytes: servingKeyBytes,
 	})
 
 	servingCertPem := new(bytes.Buffer)
