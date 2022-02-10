@@ -92,8 +92,9 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var opts struct {
 	ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 	TlsAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
-	TransportSummary bool   `short:"t" long:"transport" description:"Print important transport (eg TLS) parameters"`
-	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all transport (eg TLS) parameters"`
+	NegotiationFull  bool   `short:"N" long:"negotiation" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
+	TransportSummary bool   `short:"t" long:"transport" description:"Print important agreed transport (eg TLS) parameters"`
+	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
 	HeadSummary      bool   `short:"m" long:"head" description:"Print important header values"`
 	HeadFull         bool   `short:"M" long:"head-full" description:"Print entire request head"`
 	BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
@@ -195,7 +196,7 @@ func main() {
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				log.Info("Hook", "Event", "TLS ClientHello received")
 
-				if opts.TransportFull {
+				if opts.NegotiationFull {
 					op.TLSNegFull(log, hi)
 				}
 
