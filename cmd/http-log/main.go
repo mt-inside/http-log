@@ -12,9 +12,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +31,6 @@ import (
 )
 
 /* TODO:
-* print all possible in the http.Server and tls.Config callbacks - just L7 stuff in the http handler
 * combine code with lb-checker - stuff to render certs, tls.connectionstate, etc
 * if present, print
 *   credentials
@@ -133,37 +130,10 @@ func main() {
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 
+		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Output)
+		w.Header().Set("Content-Type", mime)
+		w.Write(bytes)
 		w.WriteHeader(opts.Status)
-
-		// TODO:
-		// - turn into getReply(), used by all these and the lambda
-		// - config option to add arbitrary pair to it
-		// - config option to en/disable the timestamp
-		body := map[string]string{"logged": "ok", "by": "http-log", "at": time.Now().Format(time.RFC3339Nano)}
-
-		var err error
-		switch opts.Output {
-		case "none":
-		case "text":
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			fmt.Fprintf(w, "Logged by http-log\n")
-		case "json":
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			err = json.NewEncoder(w).Encode(body)
-		case "json-aws-api":
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			err = json.NewEncoder(w).Encode(codec.AwsApiGwWrap(body))
-		case "xml":
-			w.Header().Set("Content-Type", "application/xml")
-			err = xml.NewEncoder(w).Encode(struct {
-				XMLName xml.Name `xml:"status"`
-				Logged  string
-				By      string
-			}{Logged: "ok", By: "http-log"})
-		}
-		if err != nil {
-			panic(err)
-		}
 	}
 
 	mux := &http.ServeMux{}
