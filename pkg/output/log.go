@@ -3,6 +3,7 @@ package output
 import (
 	"crypto/tls"
 	"net/http"
+	"net/url"
 
 	"github.com/go-logr/logr"
 )
@@ -30,13 +31,13 @@ func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 		log.Info("Header", "Name", k, "Values", v)
 	}
 }
-func (o Log) HeadSummary(log logr.Logger, proto, method, path, host, ua string, respCode int) {
+func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
 	log.Info(
 		"Headers summary",
 		"proto", proto,
 		"method", method,
 		"host", host,
-		"path", path,
+		"url", url.String(),
 		"user-agent", ua,
 		"response-code", respCode,
 	)
