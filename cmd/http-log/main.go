@@ -98,7 +98,8 @@ var opts struct {
 	HeadFull         bool   `short:"M" long:"head-full" description:"Print entire request head"`
 	BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
 	BodyFull         bool   `short:"B" long:"body-full" description:"Print full body"`
-	Output           string `short:"o" long:"output" description:"Output format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
+	Output           string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
+	Response         string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
 	Status           int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
@@ -117,10 +118,21 @@ func main() {
 	log.Info("http-log v0.5")
 
 	var op outputter
-	if isatty.IsTerminal(os.Stdout.Fd()) {
-		op = output.NewTty(true)
-	} else {
+	switch opts.Output {
+	case "text":
+		op = output.NewTty(false) // no color
+	case "pretty":
+		op = output.NewTty(true) // color
+	case "json":
 		op = output.Log{}
+	case "auto":
+		if isatty.IsTerminal(os.Stdout.Fd()) {
+			op = output.NewTty(true)
+		} else {
+			op = output.Log{}
+		}
+	default:
+		panic(errors.New("bottom"))
 	}
 
 	/*
