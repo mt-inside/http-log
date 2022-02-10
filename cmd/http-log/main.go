@@ -3,15 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -60,22 +63,22 @@ func logMiddle(h http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
+var opts struct {
+	ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+	TlsAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	TransportSummary bool   `short:"t" long:"transport" description:"Print important transport (eg TLS) parameters"`
+	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all transport (eg TLS) parameters"`
+	HeadSummary      bool   `short:"m" long:"head" description:"Print important header values"`
+	HeadFull         bool   `short:"M" long:"head-full" description:"Print entire request head"`
+	BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
+	BodyFull         bool   `short:"B" long:"body-full" description:"Print full body"`
+	Output           string `short:"o" long:"output" description:"Output format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
+	Status           int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
+}
+
 func main() {
 
 	log := usvc.GetLogger(false)
-
-	var opts struct {
-		ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-		Tls              bool   `short:"k" long:"tls" description:"Generate a self-signed TLS certificate and present it"`
-		TransportSummary bool   `short:"t" long:"transport" description:"Print important transport (eg TLS) parameters"`
-		TransportFull    bool   `short:"T" long:"transport-full" description:"Print all transport (eg TLS) parameters"`
-		HeadSummary      bool   `short:"m" long:"head" description:"Print important header values"`
-		HeadFull         bool   `short:"M" long:"head-full" description:"Print entire request head"`
-		BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
-		BodyFull         bool   `short:"B" long:"body-full" description:"Print full body"`
-		Output           string `short:"o" long:"output" description:"Output format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
-		Status           int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
-	}
 
 	_, err := flags.Parse(&opts)
 	if err != nil {
@@ -84,6 +87,8 @@ func main() {
 	if !opts.TransportSummary && !opts.TransportFull && !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
 	}
+
+	log.Info("TLS", "on", opts.TlsAlgo != "off", "algo", opts.TlsAlgo)
 
 	var op outputter
 	if isatty.IsTerminal(os.Stdout.Fd()) {
@@ -199,7 +204,7 @@ func main() {
 	}
 
 	log.Info("Listening", "addr", opts.ListenAddr)
-	if opts.Tls {
+	if opts.TlsAlgo != "off" {
 		caPair, err := genSelfSignedCa()
 		if err != nil {
 			panic(err)
@@ -226,6 +231,88 @@ func main() {
 	}
 }
 
+func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Certificate, error) {
+
+	// TODO: Cache them by ServerName
+
+	var parentSettings *x509.Certificate
+	var parentKey crypto.PrivateKey
+	if parent != nil {
+		parentSettings, _ = x509.ParseCertificate(parent.Certificate[0]) // annoyingly the call to x509.CreateCertificate() gives us []byte, not a typed object, so that's what ends up in the tls.Certificate we have in hand here. That does have a typed .Leaf, but it's lazy-generated
+		parentKey = parent.PrivateKey
+	}
+
+	keyPem := new(bytes.Buffer)
+	var certBytes []byte
+
+	switch opts.TlsAlgo {
+	case "rsa":
+		key, err := rsa.GenerateKey(rand.Reader, 4096)
+		if err != nil {
+			return nil, err
+		}
+
+		pem.Encode(keyPem, &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(key),
+		})
+
+		// Self-signing?
+		if parent == nil {
+			parentKey = key
+			parentSettings = settings
+		}
+
+		certBytes, err = x509.CreateCertificate(rand.Reader, settings, parentSettings, &key.PublicKey, parentKey)
+		if err != nil {
+			return nil, err
+		}
+
+	case "ecdsa":
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytes, _ := x509.MarshalECPrivateKey(key)
+		pem.Encode(keyPem, &pem.Block{
+			Type:  "ECDSA PRIVATE KEY",
+			Bytes: keyBytes,
+		})
+
+		// Self-signing?
+		if parent == nil {
+			parentKey = key
+			parentSettings = settings
+		}
+
+		certBytes, err = x509.CreateCertificate(rand.Reader, settings, parentSettings, &key.PublicKey, parentKey)
+		if err != nil {
+			return nil, err
+		}
+
+	// TODO: add ed25519
+
+	default:
+		panic(errors.New("bottom"))
+	}
+
+	certPem := new(bytes.Buffer)
+	pem.Encode(certPem, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certBytes,
+	})
+
+	pair, err := tls.X509KeyPair(certPem.Bytes(), keyPem.Bytes())
+
+	// append parent and its ancestory chain
+	if parent != nil {
+		pair.Certificate = append(pair.Certificate, parent.Certificate...)
+	}
+
+	return &pair, err
+}
+
 func genSelfSignedCa() (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
@@ -234,43 +321,14 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 			CommonName: "http-log self-signed ca",
 		},
 		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
+		NotAfter:              time.Now().AddDate(0, 1, 0),
 		IsCA:                  true,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
 
-	// TODO: Cache them by ServerName
-	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	caCertBytes, err := x509.CreateCertificate(rand.Reader, caSettings, caSettings, &caKey.PublicKey, caKey)
-	if err != nil {
-		return nil, err
-	}
-
-	caKeyBytes, _ := x509.MarshalECPrivateKey(caKey)
-	caKeyPem := new(bytes.Buffer)
-	pem.Encode(caKeyPem, &pem.Block{
-		Type:  "ECDSA PRIVATE KEY",
-		Bytes: caKeyBytes,
-	})
-
-	caCertPem := new(bytes.Buffer)
-	pem.Encode(caCertPem, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caCertBytes,
-	})
-
-	caPair, err := tls.X509KeyPair(caCertPem.Bytes(), caKeyPem.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	return &caPair, nil
+	return genCertPair(caSettings, nil)
 }
 
 func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -295,36 +353,7 @@ func genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	servingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	caCert, _ := x509.ParseCertificate(tmpCa.Certificate[0]) // annoyingly the call to x509.CreateCertificate() gives us []byte, not a typed object, so that's what ends up in the tls.Certificate we have in hand here. That does have a typed .Leaf, but it's lazy-generated
-	servingCertBytes, err := x509.CreateCertificate(rand.Reader, servingSettings, caCert, &servingKey.PublicKey, tmpCa.PrivateKey)
-	if err != nil {
-		return nil, err
-	}
-
-	servingKeyBytes, _ := x509.MarshalECPrivateKey(servingKey)
-	servingKeyPem := new(bytes.Buffer)
-	pem.Encode(servingKeyPem, &pem.Block{
-		Type:  "ECDSA PRIVATE KEY",
-		Bytes: servingKeyBytes,
-	})
-
-	servingCertPem := new(bytes.Buffer)
-	pem.Encode(servingCertPem, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: servingCertBytes,
-	})
-
-	certPair, err := tls.X509KeyPair(servingCertPem.Bytes(), servingKeyPem.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	return &certPair, nil
+	return genCertPair(servingSettings, tmpCa)
 }
 
 func getHeader(r *http.Request, h string) (ret string, ok bool) {
