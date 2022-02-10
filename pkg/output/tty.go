@@ -24,6 +24,14 @@ func NewTty(color bool) tty {
 	return tty{aurora.NewAurora(color)}
 }
 
+func (o tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
+	fmt.Printf("TLS negotiation\n")
+	fmt.Printf("\tsupported versions: %v\n", renderTlsVersionNames(hi.SupportedVersions))
+	fmt.Printf("\tsupported cert types: %v\n", hi.SignatureSchemes)
+	fmt.Printf("\tsupported cert curves: %v\n", hi.SupportedCurves)
+	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
+}
+
 func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 	fmt.Printf("%s %s SNI %s ALPN %s\n",
 		o.au.BrightBlack(getTimestamp()),
