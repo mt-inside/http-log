@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -64,18 +65,37 @@ func (o tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 		o.au.Cyan(r.URL.String()), // unless the request is in the weird proxy form or whatever, this will only contain a path; scheme, host etc will be empty
 		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)
-	for k, v := range r.Header {
-		fmt.Printf("%s = %v\n", k, strings.Join(v, ","))
+
+	fmt.Println("Headers")
+	for k, vs := range r.Header {
+		fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
+	}
+	if len(r.Header) == 0 {
+		fmt.Println("\t<none>")
+	}
+
+	if len(r.URL.Query()) > 0 {
+		fmt.Println("Query")
+		for k, vs := range r.URL.Query() {
+			fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
+		}
+	}
+
+	if len(r.URL.RawFragment) > 0 {
+		fmt.Printf("Fragment: %s\n", r.URL.RawFragment)
 	}
 }
-func (o tty) HeadSummary(log logr.Logger, proto, method, host, path, ua string, respCode int) {
+func (o tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
+	// TODO render # and ? iff there are query and fragment bits
 	fmt.Printf(
-		"%s %s %s %s %s by %s => %s\n",
+		"%s %s %s %s %s %s %s by %s => %s\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(proto),
 		o.au.Green(method),
 		o.au.Red(host),
-		o.au.Cyan(path),
+		o.au.Cyan(url.Path),
+		o.au.Yellow(url.RawQuery),
+		o.au.Red(url.RawFragment),
 		o.au.Cyan(ua),
 		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)

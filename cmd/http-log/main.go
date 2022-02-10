@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -34,15 +35,13 @@ import (
 * combine code with lb-checker - stuff to render certs, tls.connectionstate, etc
 * if present, print
 *   credentials
-*   fragment
-*   query (one line in summary, spell out k/v in full)
  */
 
 type outputter interface {
 	TLSNegFull(log logr.Logger, cs *tls.ClientHelloInfo)
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
-	HeadSummary(log logr.Logger, proto, method, path, host, ua string, respCode int)
+	HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(log logr.Logger, r *http.Request, respCode int)
 	BodySummary(log logr.Logger, contentType string, contentLength int64, body string)
 	BodyFull(log logr.Logger, contentType string, r *http.Request, body string)
@@ -66,7 +65,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lm.output.HeadFull(lm.log, r, opts.Status)
 	} else if opts.HeadSummary {
 		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-		lm.output.HeadSummary(lm.log, r.Proto, r.Method, r.Host, r.URL.String(), userAgent, opts.Status)
+		lm.output.HeadSummary(lm.log, r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
 	}
 
 	/* Body */
@@ -131,7 +130,7 @@ func main() {
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 
-		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Output)
+		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
 		w.Write(bytes)
 		w.WriteHeader(opts.Status)
