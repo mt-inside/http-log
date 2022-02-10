@@ -173,20 +173,20 @@ func main() {
 		BaseContext: func(l net.Listener) context.Context {
 			switch l.(type) {
 			case *net.TCPListener:
-				log.Info("Hook", "Event", "HTTP server listening", "Addr", l.Addr(), "security", "plaintext")
+				log.Info("HTTP server listening", "Addr", l.Addr(), "security", "plaintext")
 			default: // *tls.listener
-				log.Info("Hook", "Event", "HTTP server listening", "Addr", l.Addr(), "security", "tls", "algo", opts.TlsAlgo)
+				log.Info("HTTP server listening", "Addr", l.Addr(), "security", "tls", "algo", opts.TlsAlgo)
 			}
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			requestNo++ // Think everything is single-threaded...
-			log.Info("Hook", "Event", "L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
+			log.Info("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
 
 			return ctx
 		},
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			log.Info("Hook", "Event", "HTTP server connection state change", "State", cs)
+			log.Info("HTTP server connection state change", "State", cs)
 		},
 	}
 
@@ -194,7 +194,7 @@ func main() {
 		srv.TLSConfig = &tls.Config{
 			GetCertificate: loggingMux.genServingCert,
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				log.Info("Hook", "Event", "TLS ClientHello received")
+				log.Info("TLS ClientHello received")
 
 				if opts.NegotiationFull {
 					op.TLSNegFull(log, hi)
@@ -203,11 +203,11 @@ func main() {
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				log.Info("Hook", "Event", "TLS built-in cert verification finished")
+				log.Info("TLS built-in cert verification finished")
 				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Info("Hook", "Event", "TLS: all cert verification finished")
+				log.Info("TLS: all cert verification finished")
 
 				if opts.TransportFull {
 					op.TransportFull(log, &cs)
@@ -348,7 +348,7 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 
 func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 
-	lm.log.Info("Hook", "Event", "TLS: get serving cert callback")
+	lm.log.Info("TLS: get serving cert callback")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
