@@ -47,11 +47,11 @@ func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 
 func (o tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 	// TODO use pretty-print from checktls2 in lb-checker
-	fmt.Printf("%s %s SNI %s ALPN %s\n",
+	fmt.Printf("%s %s sni %s apln %s\n",
 		o.au.BrightBlack(getTimestamp()),
-		tlsVersionName(cs.Version),
-		cs.ServerName,
-		cs.NegotiatedProtocol,
+		o.au.Blue(tlsVersionName(cs.Version)),
+		o.au.Red(cs.ServerName),
+		o.au.Green(cs.NegotiatedProtocol),
 	)
 }
 
