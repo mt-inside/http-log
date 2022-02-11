@@ -43,8 +43,8 @@ type outputter interface {
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
 	HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(log logr.Logger, r *http.Request, respCode int)
-	BodySummary(log logr.Logger, contentType string, contentLength int64, body string)
-	BodyFull(log logr.Logger, contentType string, r *http.Request, body string)
+	BodySummary(log logr.Logger, contentType string, contentLength int64, method string, body []byte)
+	BodyFull(log logr.Logger, contentType string, r *http.Request, body []byte)
 }
 
 var requestNo uint
@@ -78,9 +78,9 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if opts.BodyFull {
-			lm.output.BodyFull(lm.log, contentType, r, string(bs))
+			lm.output.BodyFull(lm.log, contentType, r, bs)
 		} else if opts.BodySummary {
-			lm.output.BodySummary(lm.log, contentType, r.ContentLength, string(bs))
+			lm.output.BodySummary(lm.log, contentType, r.ContentLength, r.Method, bs)
 		}
 	}
 
@@ -173,20 +173,20 @@ func main() {
 		BaseContext: func(l net.Listener) context.Context {
 			switch l.(type) {
 			case *net.TCPListener:
-				log.Info("HTTP server listening", "Addr", l.Addr(), "security", "plaintext")
-			default: // *tls.listener
-				log.Info("HTTP server listening", "Addr", l.Addr(), "security", "tls", "algo", opts.TlsAlgo)
+				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
+			default: // *tls.listener assumed
+				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TlsAlgo)
 			}
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			requestNo++ // Think everything is single-threaded...
-			log.Info("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
+			log.V(1).Info("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
 
 			return ctx
 		},
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			log.Info("HTTP server connection state change", "State", cs)
+			log.V(1).Info("HTTP server connection state change", "State", cs)
 		},
 	}
 
@@ -194,7 +194,7 @@ func main() {
 		srv.TLSConfig = &tls.Config{
 			GetCertificate: loggingMux.genServingCert,
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				log.Info("TLS ClientHello received")
+				log.V(1).Info("TLS ClientHello received")
 
 				if opts.NegotiationFull {
 					op.TLSNegFull(log, hi)
@@ -203,11 +203,11 @@ func main() {
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				log.Info("TLS built-in cert verification finished")
+				log.V(1).Info("TLS built-in cert verification finished")
 				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Info("TLS: all cert verification finished")
+				log.V(1).Info("TLS: all cert verification finished")
 
 				if opts.TransportFull {
 					op.TransportFull(log, &cs)
@@ -348,7 +348,7 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 
 func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
 
-	lm.log.Info("TLS: get serving cert callback")
+	lm.log.V(1).Info("TLS: get serving cert callback")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {

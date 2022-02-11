@@ -43,14 +43,14 @@ func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 	)
 }
 
-func (o Log) BodyFull(log logr.Logger, contentType string, r *http.Request, bs string) {
+func (o Log) BodyFull(log logr.Logger, contentType string, r *http.Request, bs []byte) {
 	log.Info("Body",
 		"len", r.ContentLength,
 		"type", contentType,
-		"content", bs,
+		"content", string(bs),
 	)
 }
-func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int64, bs string) {
+func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
 

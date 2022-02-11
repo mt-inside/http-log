@@ -34,13 +34,13 @@ func (o tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
 }
 
 func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	fmt.Printf("%s %s SNI %s ALPN %s\n",
+	fmt.Printf("%s %s sni %s alpn %s\n",
 		o.au.BrightBlack(getTimestamp()),
-		tlsVersionName(cs.Version),
-		cs.ServerName,
-		cs.NegotiatedProtocol,
+		o.au.Blue(tlsVersionName(cs.Version)),
+		o.au.Red(cs.ServerName),
+		o.au.Green(cs.NegotiatedProtocol),
 	)
-	fmt.Printf("\tcypher suite %s\n", tls.CipherSuiteName(cs.CipherSuite))
+	fmt.Printf("\tcypher suite %s\n", o.au.Blue(tls.CipherSuiteName(cs.CipherSuite)))
 
 	// TODO add client cert if present, using routines from lb-checker
 }
@@ -100,29 +100,51 @@ func (o tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)
 }
-func (o tty) BodyFull(log logr.Logger, contentType string, r *http.Request, bs string) {
+func (o tty) BodyFull(log logr.Logger, contentType string, r *http.Request, bs []byte) {
+	// Print only if the method would traditionally have a body, or one has been sent
+	if !(r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) && len(bs) == 0 {
+		return
+	}
+
 	fmt.Printf(
-		"%s Body: %d bytes of %s \n",
+		"%s Body: alleged %d bytes of %s, actual length read %d\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Cyan(r.ContentLength),
-		o.au.Cyan(contentType),
+		o.au.Green(contentType),
+		o.au.Cyan(len(bs)),
 	)
+
+	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
 	fmt.Printf("%v", string(bs)) // assumes utf8
-	fmt.Println()
+
+	if len(bs) > 0 {
+		fmt.Println()
+	}
 }
-func (o tty) BodySummary(log logr.Logger, contentType string, contentLength int64, bs string) {
+func (o tty) BodySummary(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
 
+	// Print only if the method would traditionally have a body, or one has been sent
+	if !(method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) && bodyLen == 0 {
+		return
+	}
+
 	fmt.Printf(
-		"%s Body: %d bytes of %s \n",
+		"%s Body: alleged %d bytes of %s, actual length read %d\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Cyan(contentLength),
-		o.au.Cyan(contentType),
+		o.au.Green(contentType),
+		o.au.Cyan(len(bs)),
 	)
+
+	// TODO: ditty hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
 	fmt.Printf("%v", string(bs[0:printLen])) // assumes utf8
 	if bodyLen > printLen {
-		fmt.Printf("<%d bytes elided>", len(bs)-printLen)
+		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
 	}
-	fmt.Println()
+
+	if bodyLen > 0 {
+		fmt.Println()
+	}
 }
