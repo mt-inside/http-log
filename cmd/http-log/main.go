@@ -145,8 +145,8 @@ func main() {
 
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
-		w.Write(bytes)
 		w.WriteHeader(opts.Status)
+		w.Write(bytes)
 	}
 
 	mux := &http.ServeMux{}
