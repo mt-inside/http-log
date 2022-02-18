@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -158,7 +159,7 @@ func main() {
 	}
 
 	if opts.TlsAlgo != "off" {
-		loggingMux.caPair, err = genSelfSignedCa()
+		loggingMux.caPair, err = genSelfSignedCa(log)
 		if err != nil {
 			panic(err)
 		}
@@ -192,7 +193,7 @@ func main() {
 
 	if opts.TlsAlgo != "off" {
 		srv.TLSConfig = &tls.Config{
-			GetCertificate: loggingMux.genServingCert,
+			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				log.V(1).Info("TLS ClientHello received")
 
@@ -200,8 +201,16 @@ func main() {
 					op.TLSNegFull(log, hi)
 				}
 
+				// TODO proper op Method
+				if opts.TransportFull {
+					fmt.Println("ServerName:", hi.ServerName)
+				} else if opts.TransportSummary {
+					fmt.Println("ServerName:", hi.ServerName)
+				}
+
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
+			GetCertificate: loggingMux.genServingCert,
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				log.V(1).Info("TLS built-in cert verification finished")
 				return nil // can do extra cert verification and reject
@@ -225,9 +234,31 @@ func main() {
 	}
 }
 
-func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Certificate, error) {
+var (
+	certCacheLock sync.Mutex
+	certCache     map[string]*tls.Certificate
+)
 
-	// TODO: Cache them by ServerName
+func init() {
+	certCache = make(map[string]*tls.Certificate)
+}
+
+func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate) (*tls.Certificate, error) {
+
+	if len(settings.DNSNames) > 1 {
+		panic(errors.New("only support one SAN atm"))
+	}
+
+	name := settings.DNSNames[0]
+	log = log.WithValues("name", name)
+
+	certCacheLock.Lock()
+	if cert, ok := certCache[name]; ok {
+		log.V(1).Info("Returning from cert cache")
+		certCacheLock.Unlock()
+		return cert, nil
+	}
+	certCacheLock.Unlock()
 
 	var signerSettings *x509.Certificate
 	var signerKey crypto.PrivateKey
@@ -241,6 +272,8 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 
 	switch opts.TlsAlgo {
 	case "rsa":
+		log.V(1).Info("Generating keypair and x509 cert for it", "key", "rsa:4096")
+
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
 		if err != nil {
 			return nil, err
@@ -263,6 +296,8 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 		}
 
 	case "ecdsa":
+		log.V(1).Info("Generating keypair and x509 cert for it", "key", "ecdsa:p256")
+
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return nil, err
@@ -286,6 +321,8 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 		}
 
 	case "ed25519":
+		log.V(1).Info("Generating keypair and x509 cert for it", "key", "ed25519")
+
 		pubKey, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
@@ -325,16 +362,21 @@ func genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Cert
 		pair.Certificate = append(pair.Certificate, parent.Certificate...)
 	}
 
+	certCacheLock.Lock()
+	certCache[name] = &pair
+	certCacheLock.Unlock()
+
 	return &pair, err
 }
 
-func genSelfSignedCa() (*tls.Certificate, error) {
+func genSelfSignedCa(log logr.Logger) (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
 			CommonName: "http-log self-signed ca",
 		},
+		DNSNames:              []string{"ca"},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(0, 1, 0),
 		IsCA:                  true,
@@ -343,7 +385,7 @@ func genSelfSignedCa() (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return genCertPair(caSettings, nil)
+	return genCertPair(log, caSettings, nil)
 }
 
 func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -368,7 +410,7 @@ func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certif
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return genCertPair(servingSettings, lm.caPair)
+	return genCertPair(lm.log, servingSettings, lm.caPair)
 }
 
 func getHeader(r *http.Request, h string) (ret string, ok bool) {
