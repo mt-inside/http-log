@@ -51,10 +51,11 @@ type outputter interface {
 var requestNo uint
 
 type logMiddle struct {
-	log    logr.Logger
-	next   http.Handler
-	output outputter
-	caPair *tls.Certificate
+	log        logr.Logger
+	next       http.Handler
+	output     outputter
+	certSerial int64
+	caPair     *tls.Certificate
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +160,7 @@ func main() {
 	}
 
 	if opts.TlsAlgo != "off" {
-		loggingMux.caPair, err = genSelfSignedCa(log)
+		loggingMux.caPair, err = loggingMux.genSelfSignedCa()
 		if err != nil {
 			panic(err)
 		}
@@ -369,10 +370,11 @@ func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 	return &pair, err
 }
 
-func genSelfSignedCa(log logr.Logger) (*tls.Certificate, error) {
+func (lm *logMiddle) genSelfSignedCa() (*tls.Certificate, error) {
 
+	lm.certSerial++ FIXME think this needs to be unique per host - no more, no less. Needs the cache
 	caSettings := &x509.Certificate{
-		SerialNumber: big.NewInt(2019),
+		SerialNumber: big.NewInt(lm.certSerial),
 		Subject: pkix.Name{
 			CommonName: "http-log self-signed ca",
 		},
@@ -397,8 +399,9 @@ func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certif
 		dnsName = helloInfo.ServerName
 	}
 
+	lm.certSerial++
 	servingSettings := &x509.Certificate{
-		SerialNumber: big.NewInt(1658),
+		SerialNumber: big.NewInt(lm.certSerial),
 		Subject: pkix.Name{
 			CommonName: "http-log",
 		},
