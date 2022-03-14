@@ -3,10 +3,11 @@ module github.com/mt-inside/http-log
 go 1.17
 
 require (
-	github.com/aws/aws-lambda-go v1.27.0
+	github.com/aws/aws-lambda-go v1.28.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v1.2.0
 	github.com/jessevdk/go-flags v1.5.0
+	github.com/kr/pretty v0.1.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/mattn/go-isatty v0.0.14
 	github.com/mt-inside/go-usvc v0.0.4
@@ -14,6 +15,7 @@ require (
 
 require (
 	github.com/go-logr/zapr v1.2.0 // indirect
+	github.com/kr/text v0.1.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.1 // indirect
