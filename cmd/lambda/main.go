@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/url"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -12,30 +15,47 @@ import (
 )
 
 const (
-	respCode = 200
+	respCode   = 200
+	expectType = envelopeTypeApiGw // TODO take from "config"
 )
 
-func HandleRequest(
-	ctx context.Context,
-	input map[string]interface{}, // TODO typing is hard in golang
-) (
-	codec.AwsApiGwResponse, // TODO ditto typing
-	error, // TODO what happens if we set this?
-) {
-	//return handleDump(ctx, input)
-	return handleLog(ctx, input) // TODO split this into api-gw, alb etc. Take config for which one you're expecting, or ideall auto-detect it. Note that it doesn't really make sense to cope with direct invokes, cause there really is no http data to log...
-}
+type envelopeType int
+
+const (
+	envelopeTypeRaw   envelopeType = iota
+	envelopeTypeApiGw envelopeType = iota
+	envelopeTypeALB   envelopeType = iota
+)
 
 func main() {
 	lambda.Start(HandleRequest)
 }
 
-func getHeader(headers map[string]interface{}, key string) string {
-	if val, ok := headers[key]; ok {
-		return val.(string) // TODO case insenstive match, cause it looks client-dependant
-	} else {
-		return "<not set>"
+func HandleRequest(
+	ctx context.Context,
+	input map[string]interface{},
+) (
+	interface{},
+	error, // TODO what happens if we set this?
+) {
+	//return handleDump(ctx, input)
+
+	lc, _ := lambdacontext.FromContext(ctx)
+
+	// TODO: auto-detect based on type reflection, headers present etc
+	switch expectType {
+	case envelopeTypeRaw:
+		logRaw(lc, input)
+		return codec.GetBody(), nil
+	case envelopeTypeApiGw:
+		logApiGw(lc, input)
+		return codec.AwsApiGwWrap(respCode, codec.GetBody()), nil
+	case envelopeTypeALB:
+		panic(errors.New("TODO"))
+	default:
+		panic(errors.New("bottom"))
 	}
+
 }
 
 // Dump mode. Can only be called by invoke api, as it doesn't reply with the envelope for eg api-gw
@@ -43,34 +63,49 @@ func getHeader(headers map[string]interface{}, key string) string {
 func handleDump(
 	ctx context.Context,
 	input map[string]interface{},
-) (
-	map[string]string,
-	error,
 ) {
-	lc, _ := lambdacontext.FromContext(ctx)
-	res := map[string]string{
-		"context": spew.Sdump(lc),
-		"input":   spew.Sdump(input),
-	}
-	return res, nil
+	spew.Dump(ctx)
+	spew.Dump(input)
 }
 
-func handleLog(
-	ctx context.Context,
-	input map[string]interface{}, // TODO typedef this in codec
-) (
-	codec.AwsApiGwResponse,
-	error, // TODO what happens if we set this?
+func logRaw(
+	ctx *lambdacontext.LambdaContext,
+	input map[string]interface{},
+) {
+	log := usvc.GetLogger(false)
+	op := output.NewTty(false) // TODO: log op, fix it up first
+
+	reqTarget := &url.URL{
+		Host: ctx.InvokedFunctionArn,
+	}
+
+	op.HeadSummary(
+		log,
+		"n/a",
+		"n/a",
+		"n/a",
+		ctx.ClientContext.Client.AppTitle+" "+ctx.ClientContext.Client.AppVersionCode,
+		reqTarget,
+		respCode,
+	)
+
+	body := spew.Sdump(input)
+
+	op.BodyFull(
+		log,
+		"text/plain",
+		int64(len(body)),
+		"POST",
+		[]byte(body),
+	)
+}
+
+func logApiGw(
+	lc *lambdacontext.LambdaContext,
+	input codec.AwsApiGwRequest,
 ) {
 	log := usvc.GetLogger(false)
 	op := output.NewTty(false)
-
-	protocol := "<n/a>"
-	method := "<n/a>"
-	path := "<n/a>"
-	userAgent := "<n/a>"
-	contentType := "<n/a>"
-	body := ""
 
 	/* wot u see: TODO make MD table
 	* direct - context looks ok, input empty map
@@ -79,30 +114,47 @@ func handleLog(
 	* api-gw real client
 	 */
 
-	/* Calls from API-GW */
-	if _, ok := input["requestContext"]; ok {
-		path = input["path"].(string)
+	path := input["path"].(string)
 
-		requestContext := input["requestContext"].(map[string]interface{})
-		protocol = requestContext["protocol"].(string)
-		method = requestContext["httpMethod"].(string)
+	requestContext := input["requestContext"].(map[string]interface{})
+	protocol := requestContext["protocol"].(string)
+	method := requestContext["httpMethod"].(string)
 
-		/* api-gw indicates no headers with a present key, which maps to null.
-		* This is awful, so we replace that with a sentinel object */
-		var headers map[string]interface{}
-		if input["headers"] != nil {
-			headers = input["headers"].(map[string]interface{})
-		} else {
-			headers = map[string]interface{}{}
-		}
+	/* api-gw indicates that no headers were supplied with an existant key which maps to null.
+	* This is awful, so we replace that with a sentinel object */
+	var headers map[string]interface{}
+	if input["headers"] != nil {
+		headers = input["headers"].(map[string]interface{})
+	} else {
+		headers = map[string]interface{}{}
+	}
+	/* There's also mutliValueHeaders, but their "last" values are all present in headers */
 
-		/* Call from API-GW by a real client (not a web console test invocation) */
-		userAgent = getHeader(headers, "User-Agent")
+	/* Call from API-GW by a real client (not a web console test invocation) */
+	userAgent := getHeader(headers, "User-Agent")
+	host := getHeader(headers, "Host") // There's also requestContext[domainName] but I assume it's only set for custom domains
 
-		/* Call with a body */
-		if input["body"] != nil {
-			contentType = getHeader(headers, "content-type")
-			body = input["body"].(string)
+	var contentType string
+	var body []byte
+	/* Call with a body */
+	if input["body"] != nil {
+		contentType = getHeader(headers, "content-type")
+		body = []byte(input["body"].(string)) // It is a string type in the map; take the bytestream of that
+	}
+
+	reqTarget := &url.URL{Path: path}
+
+	/* Print cert info */
+
+	if identity, ok := requestContext["identity"].(map[string]interface{}); ok {
+		/* Print remote info TODO method on op, called by the accept() hook */
+
+		fmt.Println("Connection from: ", identity["sourceIp"].(string))
+
+		if clientCert, ok := identity["clientCert"].(map[string]interface{}); ok {
+			// TODO: move to op func
+			fmt.Println(clientCert["subjectDN"].(string))
+			fmt.Println(clientCert["issuerDN"].(string))
 		}
 	}
 
@@ -112,9 +164,9 @@ func handleLog(
 		log,
 		protocol,
 		method,
-		"TODO host",
-		path,
+		host,
 		userAgent,
+		reqTarget,
 		respCode,
 	)
 
@@ -124,10 +176,15 @@ func handleLog(
 		log,
 		contentType,
 		int64(len(body)),
+		method,
 		body,
 	)
+}
 
-	/* Reply */
-
-	return codec.AwsApiGwWrap(respCode, codec.GetBody()), nil
+func getHeader(headers map[string]interface{}, key string) string {
+	if val, ok := headers[key]; ok {
+		return val.(string) // TODO case insenstive match, cause it looks client-dependant
+	} else {
+		return "<not set>"
+	}
 }

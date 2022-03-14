@@ -13,6 +13,13 @@ import (
 	"github.com/go-logr/logr"
 )
 
+/* TODO
+* these should be PrintHead[Summary,Body] etc, and should take spelled-out arguments
+* codec should contain methods to extract them from http.Request etc
+*
+* this also needs .PrintCertSummary,Full from daemon / print-cert
+ */
+
 func getTimestamp() string {
 	return time.Now().Format("15:04:05")
 }
@@ -100,24 +107,26 @@ func (o tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)
 }
-func (o tty) BodyFull(log logr.Logger, contentType string, r *http.Request, bs []byte) {
+func (o tty) BodyFull(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
+	bodyLen := len(bs)
+
 	// Print only if the method would traditionally have a body, or one has been sent
-	if !(r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) && len(bs) == 0 {
+	if !(method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) && bodyLen == 0 {
 		return
 	}
 
 	fmt.Printf(
 		"%s Body: alleged %d bytes of %s, actual length read %d\n",
 		o.au.BrightBlack(getTimestamp()),
-		o.au.Cyan(r.ContentLength),
+		o.au.Cyan(contentLength),
 		o.au.Green(contentType),
-		o.au.Cyan(len(bs)),
+		o.au.Cyan(bodyLen),
 	)
 
 	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
 	fmt.Printf("%v", string(bs)) // assumes utf8
 
-	if len(bs) > 0 {
+	if bodyLen > 0 {
 		fmt.Println()
 	}
 }
@@ -135,10 +144,10 @@ func (o tty) BodySummary(log logr.Logger, contentType string, contentLength int6
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Cyan(contentLength),
 		o.au.Green(contentType),
-		o.au.Cyan(len(bs)),
+		o.au.Cyan(bodyLen),
 	)
 
-	// TODO: ditty hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
+	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
 	fmt.Printf("%v", string(bs[0:printLen])) // assumes utf8
 	if bodyLen > printLen {
 		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
