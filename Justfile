@@ -1,8 +1,28 @@
 default:
 	@just --list
 
-run-daemon *ARGS:
+REPO := "mtinside/http-log"
+TAG := "0.6"
+
+lint:
+	go fmt ./...
+	go vet ./...
+	golint ./...
+	golangci-lint run ./...
+	go test ./...
+
+build-lambda: #lint
+	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
+	zip http-log-lambda.zip http-log-lambda
+
+run-daemon *ARGS: #lint
 	go run ./cmd/http-log {{ARGS}}
 
-certpair:
-	openssl req -x509 -days 1 -nodes -newkey rsa:2048 -keyout server.key -out server.crt -subj "/CN=example.com" -addext "subjectAltName=DNS:example.com"
+run-daemon-docker: package-docker
+	docker run -p8080:8080 {{REPO}}:{{TAG}}
+
+package-docker:
+	docker build -t {{REPO}}:{{TAG}} .
+
+publish-docker: package-docker
+	docker push {{REPO}}:{{TAG}}
