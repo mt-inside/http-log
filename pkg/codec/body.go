@@ -14,6 +14,7 @@ import (
 // - config option to add arbitrary pair to it
 // - config option to en/disable the timestamp
 
+// GetBody generates the standard structured response
 func GetBody() map[string]string {
 	return map[string]string{
 		"logged": "ok",
@@ -22,6 +23,7 @@ func GetBody() map[string]string {
 	}
 }
 
+// BytesAndMime gives a mimetype and body bytestream for various response types
 func BytesAndMime(respCode int, body map[string]string, typ string) (bytes []byte, mime string) {
 
 	var err error
@@ -37,9 +39,6 @@ func BytesAndMime(respCode int, body map[string]string, typ string) (bytes []byt
 		mime = "text/plain; charset=utf-8"
 	case "json":
 		bytes, err = json.Marshal(body)
-		mime = "application/json; charset=utf-8"
-	case "json-aws-api":
-		bytes, err = json.Marshal(AwsApiGwWrap(respCode, body))
 		mime = "application/json; charset=utf-8"
 	case "xml":
 		bytes, err = xml.Marshal(

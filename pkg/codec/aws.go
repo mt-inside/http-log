@@ -2,25 +2,28 @@ package codec
 
 import "encoding/json"
 
-type AwsApiGwRequest map[string]interface{}
+// AwsAPIGwRequest is the envelope struct for requests from AWS API Gateway
+type AwsAPIGwRequest map[string]interface{}
 
-type AwsApiGwResponse struct {
+// AwsAPIGwResponse is the envelope struct for responses to AWS API Gateway
+type AwsAPIGwResponse struct {
 	StatusCode int               `json:"statusCode"`
 	Headers    map[string]string `json:"headers"`
 	Base64     bool              `json:"isBase64Encoded"`
 	Body       string            `json:"body"`
 }
 
-func AwsApiGwWrap(respCode int, body interface{}) AwsApiGwResponse {
-	bodyJson, err := json.Marshal(body)
+// AwsAPIGwWrap wraps a response map and status code in the AWS API Gateway response envelope
+func AwsAPIGwWrap(respCode int, body interface{}) AwsAPIGwResponse {
+	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		panic(err)
 	}
 
-	return AwsApiGwResponse{
+	return AwsAPIGwResponse{
 		respCode,
 		map[string]string{},
 		false,
-		string(bodyJson),
+		string(bodyJSON),
 	}
 }

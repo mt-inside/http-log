@@ -8,19 +8,26 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// Log is an output implementation that logs using zapr
 type Log struct{}
 
+// TLSNegFull prints full details on the TLS negotiation
 func (o Log) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
-	log.Info("Transport", "TLS client supported versions", renderTlsVersionNames(hi.SupportedVersions))
+	log.Info("Transport", "TLS client supported versions", renderTLSVersionNames(hi.SupportedVersions))
 	log.Info("Transport", "TLS client supported ALPN protocols", hi.SupportedProtos)
 }
+
+// TransportFull prints full details on the connection transport
 func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 	log.Info("Transport", "SNI", cs.ServerName)
 }
+
+// TransportSummary summarises the connection transport
 func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 	log.Info("Transport", "SNI", cs.ServerName)
 }
 
+// HeadFull prints full contents of the application-layer request header
 func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 	log.Info("Header", "Name", "proto", "Values", r.Proto)
 	log.Info("Header", "Name", "method", "Values", r.Method)
@@ -31,6 +38,8 @@ func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 		log.Info("Header", "Name", k, "Values", v)
 	}
 }
+
+// HeadSummary summarises the application-layer request header
 func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
 	log.Info(
 		"Headers summary",
@@ -43,14 +52,17 @@ func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 	)
 }
 
-func (o Log) BodyFull(log logr.Logger, contentType string, r *http.Request, bs []byte) {
+// BodyFull prints full contents of the application-layer request body
+func (o Log) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
 	log.Info("Body",
-		"len", r.ContentLength,
+		"len", contentLength,
 		"type", contentType,
 		"content", string(bs),
 	)
 }
-func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
+
+// BodySummary summarises the application-layer request body
+func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int64, bs []byte) {
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
 

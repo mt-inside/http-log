@@ -44,8 +44,8 @@ type outputter interface {
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
 	HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(log logr.Logger, r *http.Request, respCode int)
-	BodySummary(log logr.Logger, contentType string, contentLength int64, method string, body []byte)
-	BodyFull(log logr.Logger, contentType string, r *http.Request, body []byte)
+	BodySummary(log logr.Logger, contentType string, contentLength int64, body []byte)
+	BodyFull(log logr.Logger, contentType string, contentLength int64, body []byte)
 }
 
 var requestNo uint
@@ -73,16 +73,17 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Body */
 
 	contentType, _ := getHeader(r, "Content-Type")
-	if opts.BodyFull || opts.BodySummary {
+	// Print only if the method would traditionally have a body, or one has been sent
+	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
 		bs, err := io.ReadAll(r.Body)
 		if err != nil {
 			lm.log.Error(err, "failed to get body")
 		}
 
 		if opts.BodyFull {
-			lm.output.BodyFull(lm.log, contentType, r, bs)
+			lm.output.BodyFull(lm.log, contentType, r.ContentLength, bs)
 		} else if opts.BodySummary {
-			lm.output.BodySummary(lm.log, contentType, r.ContentLength, r.Method, bs)
+			lm.output.BodySummary(lm.log, contentType, r.ContentLength, bs)
 		}
 	}
 
@@ -93,7 +94,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var opts struct {
 	ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	TlsAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	TLSAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 	NegotiationFull  bool   `short:"N" long:"negotiation" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
 	TransportSummary bool   `short:"t" long:"transport" description:"Print important agreed transport (eg TLS) parameters"`
 	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
@@ -102,7 +103,7 @@ var opts struct {
 	BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
 	BodyFull         bool   `short:"B" long:"body-full" description:"Print full body"`
 	Output           string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
-	Response         string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"json-aws-api" choice:"xml" default:"text"`
+	Response         string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
 	Status           int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
@@ -148,7 +149,10 @@ func main() {
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
 		w.WriteHeader(opts.Status)
-		w.Write(bytes)
+		_, err = w.Write(bytes)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	mux := &http.ServeMux{}
@@ -159,7 +163,7 @@ func main() {
 		output: op,
 	}
 
-	if opts.TlsAlgo != "off" {
+	if opts.TLSAlgo != "off" {
 		loggingMux.caPair, err = loggingMux.genSelfSignedCa()
 		if err != nil {
 			panic(err)
@@ -177,7 +181,7 @@ func main() {
 			case *net.TCPListener:
 				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
 			default: // *tls.listener assumed
-				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TlsAlgo)
+				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TLSAlgo)
 			}
 			return context.Background()
 		},
@@ -192,7 +196,7 @@ func main() {
 		},
 	}
 
-	if opts.TlsAlgo != "off" {
+	if opts.TLSAlgo != "off" {
 		srv.TLSConfig = &tls.Config{
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -275,7 +279,7 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 	keyPem := new(bytes.Buffer)
 	var certBytes []byte
 
-	switch opts.TlsAlgo {
+	switch opts.TLSAlgo {
 	case "rsa":
 		log.V(1).Info("Generating keypair and x509 cert for it", "key", "rsa:4096")
 
@@ -284,10 +288,13 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 			return nil, err
 		}
 
-		pem.Encode(keyPem, &pem.Block{
+		err = pem.Encode(keyPem, &pem.Block{
 			Type:  "RSA PRIVATE KEY",
 			Bytes: x509.MarshalPKCS1PrivateKey(key),
 		})
+		if err != nil {
+			return nil, err
+		}
 
 		// Self-signing?
 		if parent == nil {
@@ -309,10 +316,13 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 		}
 
 		keyBytes, _ := x509.MarshalECPrivateKey(key)
-		pem.Encode(keyPem, &pem.Block{
+		err = pem.Encode(keyPem, &pem.Block{
 			Type:  "ECDSA PRIVATE KEY",
 			Bytes: keyBytes,
 		})
+		if err != nil {
+			return nil, err
+		}
 
 		// Self-signing?
 		if parent == nil {
@@ -334,10 +344,13 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 		}
 
 		keyBytes, _ := x509.MarshalPKCS8PrivateKey(key)
-		pem.Encode(keyPem, &pem.Block{
+		err = pem.Encode(keyPem, &pem.Block{
 			Type:  "PRIVATE KEY",
 			Bytes: keyBytes,
 		})
+		if err != nil {
+			return nil, err
+		}
 
 		// Self-signing?
 		if parent == nil {
@@ -355,10 +368,13 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 	}
 
 	certPem := new(bytes.Buffer)
-	pem.Encode(certPem, &pem.Block{
+	err := pem.Encode(certPem, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	pair, err := tls.X509KeyPair(certPem.Bytes(), keyPem.Bytes())
 

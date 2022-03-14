@@ -24,23 +24,27 @@ func getTimestamp() string {
 	return time.Now().Format("15:04:05")
 }
 
-type tty struct {
+// Tty is an output implementation that pretty-prints to a tty device
+type Tty struct {
 	au aurora.Aurora
 }
 
-func NewTty(color bool) tty {
-	return tty{aurora.NewAurora(color)}
+// NewTty returns a new outputter than pretty-prints to a tty device
+func NewTty(color bool) Tty {
+	return Tty{aurora.NewAurora(color)}
 }
 
-func (o tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
+// TLSNegFull prints full details on the TLS negotiation
+func (o Tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
 	fmt.Printf("TLS negotiation\n")
-	fmt.Printf("\tsupported versions: %v\n", renderTlsVersionNames(hi.SupportedVersions))
+	fmt.Printf("\tsupported versions: %v\n", renderTLSVersionNames(hi.SupportedVersions))
 	fmt.Printf("\tsupported cert types: %v\n", hi.SignatureSchemes)
 	fmt.Printf("\tsupported cert curves: %v\n", hi.SupportedCurves)
 	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
 }
 
-func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
+// TransportFull prints full details on the connection transport
+func (o Tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 	fmt.Printf("%s %s sni %s alpn %s\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Blue(tlsVersionName(cs.Version)),
@@ -52,7 +56,8 @@ func (o tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
 	// TODO add client cert if present, using routines from lb-checker
 }
 
-func (o tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
+// TransportSummary summarises the connection transport
+func (o Tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 	// TODO use pretty-print from checktls2 in lb-checker
 	fmt.Printf("%s %s sni %s apln %s\n",
 		o.au.BrightBlack(getTimestamp()),
@@ -62,7 +67,8 @@ func (o tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 	)
 }
 
-func (o tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
+// HeadFull prints full contents of the application-layer request header
+func (o Tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 	fmt.Printf(
 		"%s %s %s %s %s => %s\n",
 		o.au.BrightBlack(getTimestamp()),
@@ -92,7 +98,9 @@ func (o tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 		fmt.Printf("Fragment: %s\n", r.URL.RawFragment)
 	}
 }
-func (o tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
+
+// HeadSummary summarises the application-layer request header
+func (o Tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
 	// TODO render # and ? iff there are query and fragment bits
 	fmt.Printf(
 		"%s %s %s %s %s %s %s by %s => %s\n",
@@ -107,13 +115,10 @@ func (o tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)
 }
-func (o tty) BodyFull(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
-	bodyLen := len(bs)
 
-	// Print only if the method would traditionally have a body, or one has been sent
-	if !(method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) && bodyLen == 0 {
-		return
-	}
+// BodyFull prints full contents of the application-layer request body
+func (o Tty) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
+	bodyLen := len(bs)
 
 	fmt.Printf(
 		"%s Body: alleged %d bytes of %s, actual length read %d\n",
@@ -130,14 +135,11 @@ func (o tty) BodyFull(log logr.Logger, contentType string, contentLength int64, 
 		fmt.Println()
 	}
 }
-func (o tty) BodySummary(log logr.Logger, contentType string, contentLength int64, method string, bs []byte) {
+
+// BodySummary summarises the application-layer request body
+func (o Tty) BodySummary(log logr.Logger, contentType string, contentLength int64, bs []byte) {
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
-
-	// Print only if the method would traditionally have a body, or one has been sent
-	if !(method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) && bodyLen == 0 {
-		return
-	}
 
 	fmt.Printf(
 		"%s Body: alleged %d bytes of %s, actual length read %d\n",

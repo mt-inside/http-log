@@ -8,8 +8,9 @@ import (
 // TODO will be in stdlib anytime now... https://go-review.googlesource.com/c/go/+/321733/, https://github.com/golang/go/issues/46308
 func tlsVersionName(tlsVersion uint16) string {
 	switch tlsVersion {
-	case tls.VersionSSL30:
-		return "SSLv3"
+	// Deprecated; causes lint error
+	// case tls.VersionSSL30:
+	// 	return "SSLv3"
 	case tls.VersionTLS10:
 		return "TLSv1.0"
 	case tls.VersionTLS11:
@@ -23,7 +24,7 @@ func tlsVersionName(tlsVersion uint16) string {
 	}
 }
 
-func renderTlsVersionNames(vs []uint16) []string {
+func renderTLSVersionNames(vs []uint16) []string {
 	var ss []string
 
 	for _, v := range vs {
