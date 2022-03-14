@@ -16,22 +16,22 @@ import (
 
 const (
 	respCode   = 200
-	expectType = envelopeTypeApiGw // TODO take from "config"
+	expectType = envelopeTypeAPIGw // TODO take from "config"
 )
 
 type envelopeType int
 
 const (
 	envelopeTypeRaw   envelopeType = iota
-	envelopeTypeApiGw envelopeType = iota
+	envelopeTypeAPIGw envelopeType = iota
 	envelopeTypeALB   envelopeType = iota
 )
 
 func main() {
-	lambda.Start(HandleRequest)
+	lambda.Start(handleRequest)
 }
 
-func HandleRequest(
+func handleRequest(
 	ctx context.Context,
 	input map[string]interface{},
 ) (
@@ -47,9 +47,9 @@ func HandleRequest(
 	case envelopeTypeRaw:
 		logRaw(lc, input)
 		return codec.GetBody(), nil
-	case envelopeTypeApiGw:
-		logApiGw(lc, input)
-		return codec.AwsApiGwWrap(respCode, codec.GetBody()), nil
+	case envelopeTypeAPIGw:
+		logAPIGw(lc, input)
+		return codec.AwsAPIGwWrap(respCode, codec.GetBody()), nil
 	case envelopeTypeALB:
 		panic(errors.New("TODO"))
 	default:
@@ -95,14 +95,13 @@ func logRaw(
 		log,
 		"text/plain",
 		int64(len(body)),
-		"POST",
 		[]byte(body),
 	)
 }
 
-func logApiGw(
+func logAPIGw(
 	lc *lambdacontext.LambdaContext,
-	input codec.AwsApiGwRequest,
+	input codec.AwsAPIGwRequest,
 ) {
 	log := usvc.GetLogger(false)
 	op := output.NewTty(false)
@@ -176,7 +175,6 @@ func logApiGw(
 		log,
 		contentType,
 		int64(len(body)),
-		method,
 		body,
 	)
 }
@@ -184,7 +182,6 @@ func logApiGw(
 func getHeader(headers map[string]interface{}, key string) string {
 	if val, ok := headers[key]; ok {
 		return val.(string) // TODO case insenstive match, cause it looks client-dependant
-	} else {
-		return "<not set>"
 	}
+	return "<not set>"
 }
