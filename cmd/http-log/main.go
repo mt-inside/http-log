@@ -244,14 +244,14 @@ func init() {
 	certCache = make(map[string]*tls.Certificate)
 }
 
-func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate) (*tls.Certificate, error) {
+func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certificate) (*tls.Certificate, error) {
 
 	if len(settings.DNSNames) > 1 {
 		panic(errors.New("only support one SAN atm"))
 	}
 
 	name := settings.DNSNames[0]
-	log = log.WithValues("name", name)
+	log := lm.log.WithValues("name", name)
 
 	certCacheLock.Lock()
 	if cert, ok := certCache[name]; ok {
@@ -260,6 +260,10 @@ func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 		return cert, nil
 	}
 	certCacheLock.Unlock()
+
+	lm.certSerial++
+	settings.SerialNumber = big.NewInt(lm.certSerial)
+	log = log.WithValues("serial", lm.certSerial)
 
 	var signerSettings *x509.Certificate
 	var signerKey crypto.PrivateKey
@@ -372,9 +376,7 @@ func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 
 func (lm *logMiddle) genSelfSignedCa() (*tls.Certificate, error) {
 
-	lm.certSerial++ FIXME think this needs to be unique per host - no more, no less. Needs the cache
 	caSettings := &x509.Certificate{
-		SerialNumber: big.NewInt(lm.certSerial),
 		Subject: pkix.Name{
 			CommonName: "http-log self-signed ca",
 		},
@@ -387,7 +389,7 @@ func (lm *logMiddle) genSelfSignedCa() (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return genCertPair(log, caSettings, nil)
+	return lm.genCertPair(caSettings, nil)
 }
 
 func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -399,9 +401,7 @@ func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certif
 		dnsName = helloInfo.ServerName
 	}
 
-	lm.certSerial++
 	servingSettings := &x509.Certificate{
-		SerialNumber: big.NewInt(lm.certSerial),
 		Subject: pkix.Name{
 			CommonName: "http-log",
 		},
@@ -413,7 +413,7 @@ func (lm *logMiddle) genServingCert(helloInfo *tls.ClientHelloInfo) (*tls.Certif
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return genCertPair(lm.log, servingSettings, lm.caPair)
+	return lm.genCertPair(servingSettings, lm.caPair)
 }
 
 func getHeader(r *http.Request, h string) (ret string, ok bool) {
