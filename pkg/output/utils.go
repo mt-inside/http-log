@@ -34,6 +34,16 @@ func renderTLSVersionNames(vs []uint16) []string {
 	return ss
 }
 
+func renderCipherSuiteNames(cs []uint16) []string {
+	var ss []string
+
+	for _, c := range cs {
+		ss = append(ss, tls.CipherSuiteName(c))
+	}
+
+	return ss
+}
+
 func min(x, y int) int {
 	if x < y {
 		return x
