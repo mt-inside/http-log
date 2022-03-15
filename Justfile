@@ -11,11 +11,11 @@ lint:
 	golangci-lint run ./...
 	go test ./...
 
-build-lambda: #lint
+build-lambda: lint
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
 
-run-daemon *ARGS: #lint
+run-daemon *ARGS: lint
 	go run ./cmd/http-log {{ARGS}}
 
 run-daemon-docker: package-docker
