@@ -2,6 +2,7 @@ package output
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -9,56 +10,79 @@ import (
 )
 
 // Log is an output implementation that logs using zapr
+// TODO: this should contain the goddam logr omfg
 type Log struct{}
+
+// TLSNegSummary summarises the TLS negotiation
+func (o Log) TLSNegSummary(log logr.Logger, hi *tls.ClientHelloInfo) {
+	log = log.WithName("Transport")
+	log.Info("negotiation", "sni", hi.ServerName)
+}
 
 // TLSNegFull prints full details on the TLS negotiation
 func (o Log) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
-	log.Info("Transport", "TLS client supported versions", renderTLSVersionNames(hi.SupportedVersions))
-	log.Info("Transport", "TLS client supported ALPN protocols", hi.SupportedProtos)
-}
+	o.TLSNegSummary(log, hi)
 
-// TransportFull prints full details on the connection transport
-func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	log.Info("Transport", "SNI", cs.ServerName)
+	log = log.WithName("Transport")
+	log.Info("supported", "versions", renderTLSVersionNames(hi.SupportedVersions))
+	// On the use of %v
+	// - this Just Works - sees its and array of fmt.Stringers, gets on with it
+	// - logr docs strongly imply that .String() will be called on a passed object, but I think that's shallow; does the object in hand implement fmt.Stringer; won't look for an array of fmt.Stringers
+	// - logr has a Marshaler interface that you can implement to override printing behaviour, but in Go we can't implement that for []Foo
+	// - can't write a generic method that maps Foo -> string cause there's no variance on arrays so can't pass []T as []interface{} (or []Stringer)
+	// - TODO KISS: renderFoo() functionS that all take their specfic type and go []Foo -> []string. Can then be used here and passed to renderStyledList() in TTY + print-cert
+	log.Info("supported", "cert types", fmt.Sprintf("%v", hi.SignatureSchemes))
+	log.Info("supported", "cert curves", fmt.Sprintf("%v", hi.SupportedCurves))
+	log.Info("supported", "symmetric cypher suites", renderCipherSuiteNames(hi.CipherSuites))
+	log.Info("supported", "ALPN protocols", hi.SupportedProtos)
 }
 
 // TransportSummary summarises the connection transport
 func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
-	log.Info("Transport", "SNI", cs.ServerName)
+	log = log.WithName("Transport")
+	log.Info(
+		"agreed",
+		"sni", cs.ServerName,
+		"version", tlsVersionName(cs.Version),
+		"alpn", cs.NegotiatedProtocol,
+	)
 }
 
-// HeadFull prints full contents of the application-layer request header
-func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
-	log.Info("Header", "Name", "proto", "Values", r.Proto)
-	log.Info("Header", "Name", "method", "Values", r.Method)
-	log.Info("Header", "Name", "host", "Values", r.Host)
-	log.Info("Header", "Name", "path", "Values", r.RequestURI)
-	log.Info("Header", "Name", "response-code", "Value", respCode)
-	for k, v := range r.Header {
-		log.Info("Header", "Name", k, "Values", v)
-	}
+// TransportFull prints full details on the connection transport
+func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
+	o.TransportSummary(log, cs)
+
+	log = log.WithName("Transport")
+	log.Info("agreed", "symmetric cipher suite", cs.CipherSuite)
 }
 
 // HeadSummary summarises the application-layer request header
 func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
+	log = log.WithName("HTTP")
 	log.Info(
-		"Headers summary",
+		"request",
 		"proto", proto,
 		"method", method,
 		"host", host,
-		"url", url.String(),
+		// TODO: separate path, query (rendered as string), fragments(rendered as string), like tty headSUMMARY
+		"url", url,
 		"user-agent", ua,
-		"response-code", respCode,
+		"response", respCode,
 	)
 }
 
-// BodyFull prints full contents of the application-layer request body
-func (o Log) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
-	log.Info("Body",
-		"len", contentLength,
-		"type", contentType,
-		"content", string(bs),
-	)
+// HeadFull prints full contents of the application-layer request header
+func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
+	log = log.WithName("HTTP")
+	log.Info("request", "proto", r.Proto)
+	log.Info("request", "method", r.Method)
+	// TODO: break this out into path, all query components, all fragment components (like tty HeadFULL)
+	log.Info("request", "uri", r.RequestURI)
+	log.Info("request", "host", r.Host)
+	for k, v := range r.Header {
+		log.Info("header", "name", k, "values", v)
+	}
+	log.Info("response", "status", respCode)
 }
 
 // BodySummary summarises the application-layer request body
@@ -71,5 +95,14 @@ func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int6
 		"type", contentType,
 		"content", string(bs[0:printLen]),
 		"elided", bodyLen-printLen,
+	)
+}
+
+// BodyFull prints full contents of the application-layer request body
+func (o Log) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
+	log.Info("Body",
+		"len", contentLength,
+		"type", contentType,
+		"content", string(bs),
 	)
 }

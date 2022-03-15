@@ -15,9 +15,31 @@ import (
 
 /* TODO
 * these should be PrintHead[Summary,Body] etc, and should take spelled-out arguments
-* codec should contain methods to extract them from http.Request etc
+* codec should contain methods to extract them from http.Request, lambda etc
 *
-* this also needs .PrintCertSummary,Full from daemon / print-cert
+* this object should hold a logger.WithName(tty)
+*
+* colors: make a shared module styles, that news up a Styler(au)
+* - keep a Styler in this object and somewhere in printcert
+* - o.s.Noun(string) o.s.Addr(string)
+* - standardise colors in here
+*
+* make a styler::Url(*net.URL) that prints [scheme][host]path?query#fragment
+* - only if they're non-empty
+* - right colors
+* - use correct EscapedFragment(), EscapedPath, etc (what does print-cert do?)
+* - unit test
+* - use in here, and in p-c (it should be parsing its path into a URL (found a method for that? copied the path,query,frag components a la stdlib))
+*
+* make the RenderLists more generic
+* - renderStyledList(list, o.s.NounStyle / o.s.AddrStyle / etc)
+* - renderStyledListTruncate(list, o.s.FooStyle)
+*   - roll through the list, rendering, tracking acc + len(item) + len(', ')
+*   - when you get to the one you'll be truncating, render item[:trunc-3] in color then non-color ...
+*   - if trunc-3 < 0 just print ', ...'
+*   - unit test this! Check the case where the list is short and we don't truncate, check moving the truncate/item boundaries over each other
+* - renderAddrList() just does the net.Ip -> String map, ditto RenderTLSVersions() etc.
+*   - they just return []string cause you might wanna pass that to renderStyledList or you might want it plaintext to log
  */
 
 func getTimestamp() string {
@@ -34,50 +56,62 @@ func NewTty(color bool) Tty {
 	return Tty{aurora.NewAurora(color)}
 }
 
-// TLSNegFull prints full details on the TLS negotiation
-func (o Tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
-	fmt.Printf("TLS negotiation\n")
-	fmt.Printf("\tsupported versions: %v\n", renderTLSVersionNames(hi.SupportedVersions))
-	fmt.Printf("\tsupported cert types: %v\n", hi.SignatureSchemes)
-	fmt.Printf("\tsupported cert curves: %v\n", hi.SupportedCurves)
-	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
+// TLSNegSummary summarises the TLS negotiation
+func (o Tty) TLSNegSummary(log logr.Logger, hi *tls.ClientHelloInfo) {
+	fmt.Printf("%s TLS negotiation: ServerName %s\n", o.au.BrightBlack(getTimestamp()), o.au.Red(hi.ServerName))
 }
 
-// TransportFull prints full details on the connection transport
-func (o Tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	fmt.Printf("%s %s sni %s alpn %s\n",
-		o.au.BrightBlack(getTimestamp()),
-		o.au.Blue(tlsVersionName(cs.Version)),
-		o.au.Red(cs.ServerName),
-		o.au.Green(cs.NegotiatedProtocol),
-	)
-	fmt.Printf("\tcypher suite %s\n", o.au.Blue(tls.CipherSuiteName(cs.CipherSuite)))
-
-	// TODO add client cert if present, using routines from lb-checker
+// TLSNegFull prints full details on the TLS negotiation
+func (o Tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
+	o.TLSNegSummary(log, hi)
+	fmt.Printf("\tsupported versions: %v\n", renderTLSVersionNames(hi.SupportedVersions))
+	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
+	fmt.Printf("\tsupported cert signature types: %v\n", hi.SignatureSchemes)
+	fmt.Printf("\tsupported cert curves: %v\n", hi.SupportedCurves)
+	fmt.Printf("\tsupported symmetric cypher suites: %v\n", renderCipherSuiteNames(hi.CipherSuites))
+	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
 }
 
 // TransportSummary summarises the connection transport
 func (o Tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
-	// TODO use pretty-print from checktls2 in lb-checker
-	fmt.Printf("%s %s sni %s apln %s\n",
+	fmt.Printf("%s sni %s agreed: %s alpn %s\n",
 		o.au.BrightBlack(getTimestamp()),
-		o.au.Blue(tlsVersionName(cs.Version)),
 		o.au.Red(cs.ServerName),
+		o.au.Blue(tlsVersionName(cs.Version)),
 		o.au.Green(cs.NegotiatedProtocol),
 	)
+
+	//TODO: printbasiccertinfo(peercers[0])
+}
+
+// TransportFull prints full details on the connection transport
+func (o Tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
+	o.TransportSummary(log, cs)
+	fmt.Printf("\tcypher suite %s\n", o.au.Blue(tls.CipherSuiteName(cs.CipherSuite)))
+
+	// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
 }
 
 // HeadFull prints full contents of the application-layer request header
 func (o Tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 	fmt.Printf(
-		"%s %s %s %s %s => %s\n",
+		"%s vhost %s: %s %s %s\n",
 		o.au.BrightBlack(getTimestamp()),
+		o.au.Red(r.Host),
 		o.au.Blue(r.Proto),
 		o.au.Green(r.Method),
-		o.au.Red(r.Host),
-		o.au.Cyan(r.URL.String()), // unless the request is in the weird proxy form or whatever, this will only contain a path; scheme, host etc will be empty
-		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
+		o.au.Cyan(r.URL.Path),
 	)
+
+	if len(r.URL.Query()) > 0 {
+		fmt.Println("Query")
+		for k, vs := range r.URL.Query() {
+			fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
+		}
+	}
+	if len(r.URL.RawFragment) > 0 {
+		fmt.Printf("Fragment: %s\n", r.URL.RawFragment)
+	}
 
 	fmt.Println("Headers")
 	for k, vs := range r.Header {
@@ -87,27 +121,21 @@ func (o Tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 		fmt.Println("\t<none>")
 	}
 
-	if len(r.URL.Query()) > 0 {
-		fmt.Println("Query")
-		for k, vs := range r.URL.Query() {
-			fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
-		}
-	}
+	// TODO: print the path the req has come on: x-forwarded-for, via, etc
 
-	if len(r.URL.RawFragment) > 0 {
-		fmt.Printf("Fragment: %s\n", r.URL.RawFragment)
-	}
+	fmt.Printf("=> %s\n", o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
 }
 
 // HeadSummary summarises the application-layer request header
-func (o Tty) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
+func (o Tty) HeadSummary(log logr.Logger, proto, method, vhost, ua string, url *url.URL, respCode int) {
 	// TODO render # and ? iff there are query and fragment bits
 	fmt.Printf(
-		"%s %s %s %s %s %s %s by %s => %s\n",
+		"%s vhost %s: %s %s %s %s %s by %s => %s\n",
 		o.au.BrightBlack(getTimestamp()),
+		o.au.Red(vhost),
 		o.au.Blue(proto),
 		o.au.Green(method),
-		o.au.Red(host),
+		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
 		o.au.Cyan(url.Path),
 		o.au.Yellow(url.RawQuery),
 		o.au.Red(url.RawFragment),

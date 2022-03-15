@@ -34,11 +34,13 @@ import (
 
 /* TODO:
 * combine code with lb-checker - stuff to render certs, tls.connectionstate, etc
+* option to demand client certs, print them
 * if present, print
 *   credentials
  */
 
 type outputter interface {
+	TLSNegSummary(log logr.Logger, cs *tls.ClientHelloInfo)
 	TLSNegFull(log logr.Logger, cs *tls.ClientHelloInfo)
 	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
 	TransportFull(log logr.Logger, cs *tls.ConnectionState)
@@ -51,11 +53,10 @@ type outputter interface {
 var requestNo uint
 
 type logMiddle struct {
-	log        logr.Logger
-	next       http.Handler
-	output     outputter
-	certSerial int64
-	caPair     *tls.Certificate
+	log    logr.Logger
+	next   http.Handler
+	output outputter
+	caPair *tls.Certificate
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -93,18 +94,19 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 var opts struct {
-	ListenAddr       string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	TLSAlgo          string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
-	NegotiationFull  bool   `short:"N" long:"negotiation" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
-	TransportSummary bool   `short:"t" long:"transport" description:"Print important agreed transport (eg TLS) parameters"`
-	TransportFull    bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
-	HeadSummary      bool   `short:"m" long:"head" description:"Print important header values"`
-	HeadFull         bool   `short:"M" long:"head-full" description:"Print entire request head"`
-	BodySummary      bool   `short:"b" long:"body" description:"Print truncated body"`
-	BodyFull         bool   `short:"B" long:"body-full" description:"Print full body"`
-	Output           string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
-	Response         string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
-	Status           int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
+	ListenAddr         string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+	TLSAlgo            string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
+	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
+	TransportSummary   bool   `short:"t" long:"transport" description:"Print important agreed transport (eg TLS) parameters"`
+	TransportFull      bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
+	HeadSummary        bool   `short:"m" long:"head" description:"Print important header values"`
+	HeadFull           bool   `short:"M" long:"head-full" description:"Print entire request head"`
+	BodySummary        bool   `short:"b" long:"body" description:"Print truncated body"`
+	BodyFull           bool   `short:"B" long:"body-full" description:"Print full body"`
+	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
+	Response           string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
+	Status             int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
 func main() {
@@ -204,13 +206,8 @@ func main() {
 
 				if opts.NegotiationFull {
 					op.TLSNegFull(log, hi)
-				}
-
-				// TODO proper op Method
-				if opts.TransportFull {
-					fmt.Println("ServerName:", hi.ServerName)
-				} else if opts.TransportSummary {
-					fmt.Println("ServerName:", hi.ServerName)
+				} else if opts.NegotiationSummary {
+					op.TLSNegSummary(log, hi)
 				}
 
 				return nil, nil // option to bail handshake or change TLSConfig
@@ -259,15 +256,15 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 
 	certCacheLock.Lock()
 	if cert, ok := certCache[name]; ok {
-		log.V(1).Info("Returning from cert cache")
+		x509Cert, _ := x509.ParseCertificate(cert.Certificate[0])
+		log.V(1).Info("Returning from cert cache", "serial", x509Cert.SerialNumber)
 		certCacheLock.Unlock()
 		return cert, nil
 	}
 	certCacheLock.Unlock()
 
-	lm.certSerial++
-	settings.SerialNumber = big.NewInt(lm.certSerial)
-	log = log.WithValues("serial", lm.certSerial)
+	settings.SerialNumber = big.NewInt(time.Now().Unix())
+	log = log.WithValues("serial", settings.SerialNumber)
 
 	var signerSettings *x509.Certificate
 	var signerKey crypto.PrivateKey
@@ -281,6 +278,7 @@ func (lm *logMiddle) genCertPair(settings *x509.Certificate, parent *tls.Certifi
 
 	switch opts.TLSAlgo {
 	case "rsa":
+		// TODO: use print-cert's PrintPublicKeyAlgo() on what we make (I realise we know the info but it's one less string to keep in sync)
 		log.V(1).Info("Generating keypair and x509 cert for it", "key", "rsa:4096")
 
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
@@ -394,7 +392,7 @@ func (lm *logMiddle) genSelfSignedCa() (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: "http-log self-signed ca",
+			CommonName: "http-log self-signed CA",
 		},
 		DNSNames:              []string{"ca"},
 		NotBefore:             time.Now(),
