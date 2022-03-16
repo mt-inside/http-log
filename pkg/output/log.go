@@ -70,8 +70,7 @@ func (o Log) HeadSummary(proto, method, host, ua string, url *url.URL, respCode 
 		"proto", proto,
 		"method", method,
 		"host", host,
-		// TODO: separate path, query (rendered as string), fragments(rendered as string), like tty headSUMMARY
-		"url", url,
+		"path", renderPathComponents(url),
 		"user-agent", ua,
 		"response", respCode,
 	)

@@ -47,12 +47,13 @@ func getTimestamp() string {
 // Tty is an output implementation that pretty-prints to a tty device
 type Tty struct {
 	log logr.Logger
-	au  aurora.Aurora
+	s   Styler
+	au  aurora.Aurora // FIXME temp
 }
 
 // NewTty returns a new outputter than pretty-prints to a tty device
 func NewTty(log logr.Logger, color bool) Tty {
-	return Tty{log, aurora.NewAurora(color)}
+	return Tty{log, NewStyler(aurora.NewAurora(color)), aurora.NewAurora(false)}
 }
 
 // TLSNegSummary summarises the TLS negotiation
@@ -91,76 +92,55 @@ func (o Tty) TransportFull(cs *tls.ConnectionState) {
 	// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
 }
 
+// HeadSummary summarises the application-layer request header
+func (o Tty) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode int) {
+	// TODO render # and ? iff there are query and fragment bits
+	fmt.Printf(
+		"%s vhost %s: %s %s %s by %s => %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.Addr(vhost),
+		o.s.Noun(proto),
+		o.s.Verb(method),
+		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
+		renderPathComponentsColor(url, o.s),
+		o.s.Noun(ua),
+		o.s.Bright(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
+	)
+}
+
 // HeadFull prints full contents of the application-layer request header
 func (o Tty) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf(
 		"%s vhost %s: %s %s %s\n",
-		o.au.BrightBlack(getTimestamp()),
-		o.au.Red(r.Host),
-		o.au.Blue(r.Proto),
-		o.au.Green(r.Method),
-		o.au.Cyan(r.URL.Path),
+		o.s.Info(getTimestamp()),
+		o.s.Addr(r.Host),
+		o.s.Noun(r.Proto),
+		o.s.Verb(r.Method),
+		o.s.Addr(r.URL.EscapedPath()),
 	)
 
 	if len(r.URL.Query()) > 0 {
 		fmt.Println("Query")
 		for k, vs := range r.URL.Query() {
-			fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
+			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 		}
 	}
 	if len(r.URL.RawFragment) > 0 {
-		fmt.Printf("Fragment: %s\n", r.URL.RawFragment)
+		fmt.Printf("Fragment: %s\n", o.s.Addr(r.URL.RawFragment))
 	}
 
 	fmt.Println("Headers")
+	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
 	for k, vs := range r.Header {
-		fmt.Printf("\t%s = %v\n", k, strings.Join(vs, ","))
+		fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 	}
 	if len(r.Header) == 0 {
-		fmt.Println("\t<none>")
+		fmt.Println(o.s.Info("\t<none>"))
 	}
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc
 
 	fmt.Printf("=> %s\n", o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
-}
-
-// HeadSummary summarises the application-layer request header
-func (o Tty) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode int) {
-	// TODO render # and ? iff there are query and fragment bits
-	fmt.Printf(
-		"%s vhost %s: %s %s %s %s %s by %s => %s\n",
-		o.au.BrightBlack(getTimestamp()),
-		o.au.Red(vhost),
-		o.au.Blue(proto),
-		o.au.Green(method),
-		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
-		o.au.Cyan(url.Path),
-		o.au.Yellow(url.RawQuery),
-		o.au.Red(url.RawFragment),
-		o.au.Cyan(ua),
-		o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
-	)
-}
-
-// BodyFull prints full contents of the application-layer request body
-func (o Tty) BodyFull(contentType string, contentLength int64, bs []byte) {
-	bodyLen := len(bs)
-
-	fmt.Printf(
-		"%s Body: alleged %d bytes of %s, actual length read %d\n",
-		o.au.BrightBlack(getTimestamp()),
-		o.au.Cyan(contentLength),
-		o.au.Green(contentType),
-		o.au.Cyan(bodyLen),
-	)
-
-	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
-	fmt.Printf("%v", string(bs)) // assumes utf8
-
-	if bodyLen > 0 {
-		fmt.Println()
-	}
 }
 
 // BodySummary summarises the application-layer request body
@@ -181,6 +161,26 @@ func (o Tty) BodySummary(contentType string, contentLength int64, bs []byte) {
 	if bodyLen > printLen {
 		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
 	}
+
+	if bodyLen > 0 {
+		fmt.Println()
+	}
+}
+
+// BodyFull prints full contents of the application-layer request body
+func (o Tty) BodyFull(contentType string, contentLength int64, bs []byte) {
+	bodyLen := len(bs)
+
+	fmt.Printf(
+		"%s Body: alleged %d bytes of %s, actual length read %d\n",
+		o.au.BrightBlack(getTimestamp()),
+		o.au.Cyan(contentLength),
+		o.au.Green(contentType),
+		o.au.Cyan(bodyLen),
+	)
+
+	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
+	fmt.Printf("%v", string(bs)) // assumes utf8
 
 	if bodyLen > 0 {
 		fmt.Println()

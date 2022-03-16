@@ -3,6 +3,8 @@ package output
 import (
 	"crypto/tls"
 	"fmt"
+	"net/url"
+	"strings"
 )
 
 // TODO will be in stdlib anytime now... https://go-review.googlesource.com/c/go/+/321733/, https://github.com/golang/go/issues/46308
@@ -49,4 +51,48 @@ func min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func renderPathComponents(u *url.URL) string {
+	var b strings.Builder
+
+	if len(u.EscapedPath()) > 0 {
+		b.WriteString(u.EscapedPath())
+	} else {
+		b.WriteString("/")
+	}
+
+	if len(u.RawQuery) > 0 {
+		b.WriteString("?")
+		b.WriteString(u.RawQuery)
+	}
+
+	if len(u.EscapedFragment()) > 0 {
+		b.WriteString("#")
+		b.WriteString(u.EscapedFragment())
+	}
+
+	return b.String()
+}
+
+func renderPathComponentsColor(u *url.URL, s Styler) string {
+	var b strings.Builder
+
+	if len(u.EscapedPath()) > 0 {
+		b.WriteString(s.Noun(u.EscapedPath()).String())
+	} else {
+		b.WriteString(s.Noun("/").String())
+	}
+
+	if len(u.RawQuery) > 0 {
+		b.WriteString("?")
+		b.WriteString(s.Verb(u.RawQuery).String())
+	}
+
+	if len(u.EscapedFragment()) > 0 {
+		b.WriteString("#")
+		b.WriteString(s.Addr(u.EscapedFragment()).String())
+	}
+
+	return b.String()
 }
