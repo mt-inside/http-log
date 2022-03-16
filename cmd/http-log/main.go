@@ -40,14 +40,14 @@ import (
  */
 
 type outputter interface {
-	TLSNegSummary(log logr.Logger, cs *tls.ClientHelloInfo)
-	TLSNegFull(log logr.Logger, cs *tls.ClientHelloInfo)
-	TransportSummary(log logr.Logger, cs *tls.ConnectionState)
-	TransportFull(log logr.Logger, cs *tls.ConnectionState)
-	HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int)
-	HeadFull(log logr.Logger, r *http.Request, respCode int)
-	BodySummary(log logr.Logger, contentType string, contentLength int64, body []byte)
-	BodyFull(log logr.Logger, contentType string, contentLength int64, body []byte)
+	TLSNegSummary(cs *tls.ClientHelloInfo)
+	TLSNegFull(cs *tls.ClientHelloInfo)
+	TransportSummary(cs *tls.ConnectionState)
+	TransportFull(cs *tls.ConnectionState)
+	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
+	HeadFull(r *http.Request, respCode int)
+	BodySummary(contentType string, contentLength int64, body []byte)
+	BodyFull(contentType string, contentLength int64, body []byte)
 }
 
 var requestNo uint
@@ -65,10 +65,10 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	userAgent, _ := getHeader(r, "User-Agent")
 	if opts.HeadFull {
-		lm.output.HeadFull(lm.log, r, opts.Status)
+		lm.output.HeadFull(r, opts.Status)
 	} else if opts.HeadSummary {
 		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-		lm.output.HeadSummary(lm.log, r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
+		lm.output.HeadSummary(r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
 	}
 
 	/* Body */
@@ -82,9 +82,9 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if opts.BodyFull {
-			lm.output.BodyFull(lm.log, contentType, r.ContentLength, bs)
+			lm.output.BodyFull(contentType, r.ContentLength, bs)
 		} else if opts.BodySummary {
-			lm.output.BodySummary(lm.log, contentType, r.ContentLength, bs)
+			lm.output.BodySummary(contentType, r.ContentLength, bs)
 		}
 	}
 
@@ -126,16 +126,16 @@ func main() {
 	var op outputter
 	switch opts.Output {
 	case "text":
-		op = output.NewTty(false) // no color
+		op = output.NewTty(log, false) // no color
 	case "pretty":
-		op = output.NewTty(true) // color
+		op = output.NewTty(log, true) // color
 	case "json":
-		op = output.Log{}
+		op = output.NewLog(log)
 	case "auto":
 		if isatty.IsTerminal(os.Stdout.Fd()) {
-			op = output.NewTty(true)
+			op = output.NewTty(log, true)
 		} else {
-			op = output.Log{}
+			op = output.NewLog(log)
 		}
 	default:
 		panic(errors.New("bottom"))
@@ -205,9 +205,9 @@ func main() {
 				log.V(1).Info("TLS ClientHello received")
 
 				if opts.NegotiationFull {
-					op.TLSNegFull(log, hi)
+					op.TLSNegFull(hi)
 				} else if opts.NegotiationSummary {
-					op.TLSNegSummary(log, hi)
+					op.TLSNegSummary(hi)
 				}
 
 				return nil, nil // option to bail handshake or change TLSConfig
@@ -221,10 +221,10 @@ func main() {
 				log.V(1).Info("TLS: all cert verification finished")
 
 				if opts.TransportFull {
-					op.TransportFull(log, &cs)
+					op.TransportFull(&cs)
 				} else if opts.TransportSummary {
 					// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-					op.TransportSummary(log, &cs)
+					op.TransportSummary(&cs)
 				}
 
 				return nil // can inspect all connection and TLS info and reject

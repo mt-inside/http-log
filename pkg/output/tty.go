@@ -17,8 +17,6 @@ import (
 * these should be PrintHead[Summary,Body] etc, and should take spelled-out arguments
 * codec should contain methods to extract them from http.Request, lambda etc
 *
-* this object should hold a logger.WithName(tty)
-*
 * colors: make a shared module styles, that news up a Styler(au)
 * - keep a Styler in this object and somewhere in printcert
 * - o.s.Noun(string) o.s.Addr(string)
@@ -48,22 +46,23 @@ func getTimestamp() string {
 
 // Tty is an output implementation that pretty-prints to a tty device
 type Tty struct {
-	au aurora.Aurora
+	log logr.Logger
+	au  aurora.Aurora
 }
 
 // NewTty returns a new outputter than pretty-prints to a tty device
-func NewTty(color bool) Tty {
-	return Tty{aurora.NewAurora(color)}
+func NewTty(log logr.Logger, color bool) Tty {
+	return Tty{log, aurora.NewAurora(color)}
 }
 
 // TLSNegSummary summarises the TLS negotiation
-func (o Tty) TLSNegSummary(log logr.Logger, hi *tls.ClientHelloInfo) {
+func (o Tty) TLSNegSummary(hi *tls.ClientHelloInfo) {
 	fmt.Printf("%s TLS negotiation: ServerName %s\n", o.au.BrightBlack(getTimestamp()), o.au.Red(hi.ServerName))
 }
 
 // TLSNegFull prints full details on the TLS negotiation
-func (o Tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
-	o.TLSNegSummary(log, hi)
+func (o Tty) TLSNegFull(hi *tls.ClientHelloInfo) {
+	o.TLSNegSummary(hi)
 	fmt.Printf("\tsupported versions: %v\n", renderTLSVersionNames(hi.SupportedVersions))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
 	fmt.Printf("\tsupported cert signature types: %v\n", hi.SignatureSchemes)
@@ -73,7 +72,7 @@ func (o Tty) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
 }
 
 // TransportSummary summarises the connection transport
-func (o Tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
+func (o Tty) TransportSummary(cs *tls.ConnectionState) {
 	fmt.Printf("%s sni %s agreed: %s alpn %s\n",
 		o.au.BrightBlack(getTimestamp()),
 		o.au.Red(cs.ServerName),
@@ -85,15 +84,15 @@ func (o Tty) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 }
 
 // TransportFull prints full details on the connection transport
-func (o Tty) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	o.TransportSummary(log, cs)
+func (o Tty) TransportFull(cs *tls.ConnectionState) {
+	o.TransportSummary(cs)
 	fmt.Printf("\tcypher suite %s\n", o.au.Blue(tls.CipherSuiteName(cs.CipherSuite)))
 
 	// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
 }
 
 // HeadFull prints full contents of the application-layer request header
-func (o Tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
+func (o Tty) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf(
 		"%s vhost %s: %s %s %s\n",
 		o.au.BrightBlack(getTimestamp()),
@@ -127,7 +126,7 @@ func (o Tty) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 }
 
 // HeadSummary summarises the application-layer request header
-func (o Tty) HeadSummary(log logr.Logger, proto, method, vhost, ua string, url *url.URL, respCode int) {
+func (o Tty) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode int) {
 	// TODO render # and ? iff there are query and fragment bits
 	fmt.Printf(
 		"%s vhost %s: %s %s %s %s %s by %s => %s\n",
@@ -145,7 +144,7 @@ func (o Tty) HeadSummary(log logr.Logger, proto, method, vhost, ua string, url *
 }
 
 // BodyFull prints full contents of the application-layer request body
-func (o Tty) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
+func (o Tty) BodyFull(contentType string, contentLength int64, bs []byte) {
 	bodyLen := len(bs)
 
 	fmt.Printf(
@@ -165,7 +164,7 @@ func (o Tty) BodyFull(log logr.Logger, contentType string, contentLength int64, 
 }
 
 // BodySummary summarises the application-layer request body
-func (o Tty) BodySummary(log logr.Logger, contentType string, contentLength int64, bs []byte) {
+func (o Tty) BodySummary(contentType string, contentLength int64, bs []byte) {
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
 
