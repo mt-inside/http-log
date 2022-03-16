@@ -10,20 +10,26 @@ import (
 )
 
 // Log is an output implementation that logs using zapr
-// TODO: this should contain the goddam logr omfg
-type Log struct{}
+type Log struct {
+	log logr.Logger
+}
+
+// NewLog returns a new outputter than logs using zapr
+func NewLog(log logr.Logger) Log {
+	return Log{log}
+}
 
 // TLSNegSummary summarises the TLS negotiation
-func (o Log) TLSNegSummary(log logr.Logger, hi *tls.ClientHelloInfo) {
-	log = log.WithName("Transport")
+func (o Log) TLSNegSummary(hi *tls.ClientHelloInfo) {
+	log := o.log.WithName("Transport")
 	log.Info("negotiation", "sni", hi.ServerName)
 }
 
 // TLSNegFull prints full details on the TLS negotiation
-func (o Log) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
-	o.TLSNegSummary(log, hi)
+func (o Log) TLSNegFull(hi *tls.ClientHelloInfo) {
+	o.TLSNegSummary(hi)
 
-	log = log.WithName("Transport")
+	log := o.log.WithName("Transport")
 	log.Info("supported", "versions", renderTLSVersionNames(hi.SupportedVersions))
 	// On the use of %v
 	// - this Just Works - sees its and array of fmt.Stringers, gets on with it
@@ -38,8 +44,8 @@ func (o Log) TLSNegFull(log logr.Logger, hi *tls.ClientHelloInfo) {
 }
 
 // TransportSummary summarises the connection transport
-func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
-	log = log.WithName("Transport")
+func (o Log) TransportSummary(cs *tls.ConnectionState) {
+	log := o.log.WithName("Transport")
 	log.Info(
 		"agreed",
 		"sni", cs.ServerName,
@@ -49,16 +55,16 @@ func (o Log) TransportSummary(log logr.Logger, cs *tls.ConnectionState) {
 }
 
 // TransportFull prints full details on the connection transport
-func (o Log) TransportFull(log logr.Logger, cs *tls.ConnectionState) {
-	o.TransportSummary(log, cs)
+func (o Log) TransportFull(cs *tls.ConnectionState) {
+	o.TransportSummary(cs)
 
-	log = log.WithName("Transport")
+	log := o.log.WithName("Transport")
 	log.Info("agreed", "symmetric cipher suite", cs.CipherSuite)
 }
 
 // HeadSummary summarises the application-layer request header
-func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *url.URL, respCode int) {
-	log = log.WithName("HTTP")
+func (o Log) HeadSummary(proto, method, host, ua string, url *url.URL, respCode int) {
+	log := o.log.WithName("HTTP")
 	log.Info(
 		"request",
 		"proto", proto,
@@ -72,8 +78,8 @@ func (o Log) HeadSummary(log logr.Logger, proto, method, host, ua string, url *u
 }
 
 // HeadFull prints full contents of the application-layer request header
-func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
-	log = log.WithName("HTTP")
+func (o Log) HeadFull(r *http.Request, respCode int) {
+	log := o.log.WithName("HTTP")
 	log.Info("request", "proto", r.Proto)
 	log.Info("request", "method", r.Method)
 	// TODO: break this out into path, all query components, all fragment components (like tty HeadFULL)
@@ -86,11 +92,12 @@ func (o Log) HeadFull(log logr.Logger, r *http.Request, respCode int) {
 }
 
 // BodySummary summarises the application-layer request body
-func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int64, bs []byte) {
+func (o Log) BodySummary(contentType string, contentLength int64, bs []byte) {
+	log := o.log.WithName("Body")
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
 
-	log.Info("Body Summary",
+	log.Info("Summary",
 		"len", contentLength,
 		"type", contentType,
 		"content", string(bs[0:printLen]),
@@ -99,8 +106,9 @@ func (o Log) BodySummary(log logr.Logger, contentType string, contentLength int6
 }
 
 // BodyFull prints full contents of the application-layer request body
-func (o Log) BodyFull(log logr.Logger, contentType string, contentLength int64, bs []byte) {
-	log.Info("Body",
+func (o Log) BodyFull(contentType string, contentLength int64, bs []byte) {
+	log := o.log.WithName("Body")
+	log.Info("Full",
 		"len", contentLength,
 		"type", contentType,
 		"content", string(bs),

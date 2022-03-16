@@ -73,14 +73,13 @@ func logRaw(
 	input map[string]interface{},
 ) {
 	log := usvc.GetLogger(false)
-	op := output.NewTty(false) // TODO: log op, fix it up first
+	op := output.NewTty(log, false) // TODO: log op, fix it up first
 
 	reqTarget := &url.URL{
 		Host: ctx.InvokedFunctionArn,
 	}
 
 	op.HeadSummary(
-		log,
 		"n/a",
 		"n/a",
 		"n/a",
@@ -92,7 +91,6 @@ func logRaw(
 	body := spew.Sdump(input)
 
 	op.BodyFull(
-		log,
 		"text/plain",
 		int64(len(body)),
 		[]byte(body),
@@ -104,7 +102,7 @@ func logAPIGw(
 	input codec.AwsAPIGwRequest,
 ) {
 	log := usvc.GetLogger(false)
-	op := output.NewTty(false)
+	op := output.NewTty(log, false)
 
 	/* wot u see: TODO make MD table
 	* direct - context looks ok, input empty map
@@ -160,7 +158,6 @@ func logAPIGw(
 	/* Print Headers */
 
 	op.HeadSummary(
-		log,
 		protocol,
 		method,
 		host,
@@ -172,7 +169,6 @@ func logAPIGw(
 	/* Print Body */
 
 	op.BodySummary(
-		log,
 		contentType,
 		int64(len(body)),
 		body,
