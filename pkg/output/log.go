@@ -70,7 +70,7 @@ func (o Log) HeadSummary(proto, method, host, ua string, url *url.URL, respCode 
 		"proto", proto,
 		"method", method,
 		"host", host,
-		"path", renderPathComponents(url),
+		"path", url.RequestURI(),
 		"user-agent", ua,
 		"response", respCode,
 	)
@@ -82,7 +82,7 @@ func (o Log) HeadFull(r *http.Request, respCode int) {
 	log.Info("request", "proto", r.Proto)
 	log.Info("request", "method", r.Method)
 	// TODO: break this out into path, all query components, all fragment components (like tty HeadFULL)
-	log.Info("request", "uri", r.RequestURI)
+	log.Info("request", "uri", r.URL.RequestURI())
 	log.Info("request", "host", r.Host)
 	for k, v := range r.Header {
 		log.Info("header", "name", k, "values", v)
