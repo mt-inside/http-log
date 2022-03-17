@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/logrusorgru/aurora"
+	"github.com/logrusorgru/aurora/v3"
 )
 
 /* TODO

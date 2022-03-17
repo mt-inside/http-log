@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/logrusorgru/aurora"
+	"github.com/logrusorgru/aurora/v3"
 )
 
 func TestUrlPath(t *testing.T) {
