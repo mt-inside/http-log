@@ -52,12 +52,17 @@ func NewTty(log logr.Logger, color bool) Tty {
 
 // TLSNegSummary summarises the TLS negotiation
 func (o Tty) TLSNegSummary(hi *tls.ClientHelloInfo) {
-	fmt.Printf("%s TLS negotiation: ServerName %s\n", o.au.BrightBlack(getTimestamp()), o.au.Red(hi.ServerName))
+	fmt.Printf(
+		"%s TLS negotiation: ServerName %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.Addr(hi.ServerName),
+	)
 }
 
 // TLSNegFull prints full details on the TLS negotiation
 func (o Tty) TLSNegFull(hi *tls.ClientHelloInfo) {
 	o.TLSNegSummary(hi)
+
 	fmt.Printf("\tsupported versions: %v\n", renderTLSVersionNames(hi.SupportedVersions))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
 	fmt.Printf("\tsupported cert signature types: %v\n", hi.SignatureSchemes)
