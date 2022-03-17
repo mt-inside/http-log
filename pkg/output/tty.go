@@ -8,25 +8,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/logrusorgru/aurora"
-
 	"github.com/go-logr/logr"
+	"github.com/logrusorgru/aurora"
 )
 
 /* TODO
 * these should be PrintHead[Summary,Body] etc, and should take spelled-out arguments
 * codec should contain methods to extract them from http.Request, lambda etc
 *
-* colors: make a shared module styles, that news up a Styler(au)
-* - keep a Styler in this object and somewhere in printcert
-* - o.s.Noun(string) o.s.Addr(string)
-* - standardise colors in here
+* colors: make a shared module styles
+* - apply everywhere here
+* - use in print-cert
 *
-* make a styler::Url(*net.URL) that prints [scheme][host]path?query#fragment
-* - only if they're non-empty
-* - right colors
-* - use correct EscapedFragment(), EscapedPath, etc (what does print-cert do?)
-* - unit test
+* make a styler::UrlPath(*net.URL)
 * - use in here, and in p-c (it should be parsing its path into a URL (found a method for that? copied the path,query,frag components a la stdlib))
 *
 * make the RenderLists more generic
@@ -102,7 +96,7 @@ func (o Tty) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode
 		o.s.Noun(proto),
 		o.s.Verb(method),
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
-		renderPathComponentsColor(url, o.s),
+		o.s.UrlPath(url),
 		o.s.Noun(ua),
 		o.s.Bright(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
 	)
