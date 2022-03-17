@@ -3,13 +3,17 @@ package output
 import (
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v4/request"
 	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 /* TODO
@@ -142,27 +146,35 @@ func (o Tty) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf("=> %s\n", o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
 }
 
-// func (o Tty) AuthSummary(r *http.Request) {
-// 	token, err := request.ParseFromRequest(
-// 		r,
-// 		request.OAuth2Extractor, // Looks for `Authorization: Bearer foo` or body field `access_token`
-// 		func(token *jwt.Token) (interface{}, error) { panic(errors.New("don't call me")) },
-// 		request.WithClaims(&jwt.RegisteredClaims{}),
-// 		request.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
-// 	)
+// AuthSummary summarises the authentication and authorization credentials in the request
+func (o Tty) AuthSummary(r *http.Request) {
+}
 
-// 	fmt.Println("Token valid?", RenderYesError(err))
+// AuthFull prints detailed information about the authentication and authorization credentials in the request
+func (o Tty) AuthFull(r *http.Request) {
+	var keyFunc func(token *jwt.Token) (interface{}, error) = nil
+	if true { // FIXME
+		bytes, err := ioutil.ReadFile("/home/matt/work/personal/talks/istio-demo-master/42-jwt-pki/public.pem") // FIXME
+		utils.CheckErr(err)
 
-// 	spew.Dump(token.Claims)
-// 	claims := token.Claims.(*jwt.RegisteredClaims)
-// 	fmt.Printf(
-// 		"JWT subj %s iss %s [%s -> %s]\n",
-// 		o.s.Bright(claims.Subject),
-// 		o.s.Bright(claims.Issuer),
-// 		RenderTime(claims.NotBefore, true),
-// 		RenderTime(claims.ExpiresAt, false),
-// 	)
-// }
+		publicKey, err := utils.ParsePublicKey(o.log, bytes)
+		utils.CheckErr(err)
+
+		keyFunc = func(token *jwt.Token) (interface{}, error) { return publicKey, err }
+	}
+
+	token, err := request.ParseFromRequest(
+		r,
+		request.OAuth2Extractor, // Looks for `Authorization: Bearer foo` or body field `access_token`
+		keyFunc,
+		request.WithClaims(&jwt.RegisteredClaims{}),
+		request.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
+	)
+
+	fmt.Println("JWT", o.s.JWTClaims(token))
+	fmt.Printf("\t%s\n", o.s.JWTMeta(token))
+	fmt.Println("\tvalid?", utils.RenderYesError(err))
+}
 
 // BodySummary summarises the application-layer request body
 func (o Tty) BodySummary(contentType string, contentLength int64, bs []byte) {

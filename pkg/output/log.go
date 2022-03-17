@@ -90,6 +90,14 @@ func (o Log) HeadFull(r *http.Request, respCode int) {
 	log.Info("response", "status", respCode)
 }
 
+// AuthSummary summarises the authentication and authorization credentials in the request
+func (o Log) AuthSummary(r *http.Request) {
+}
+
+// AuthFull prints detailed information about the authentication and authorization credentials in the request
+func (o Log) AuthFull(r *http.Request) {
+}
+
 // BodySummary summarises the application-layer request body
 func (o Log) BodySummary(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("Body")
