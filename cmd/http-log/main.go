@@ -37,6 +37,7 @@ import (
 * option to demand client certs, print them
 * if present, print
 *   credentials
+*   - decode JWTs, allow supply of jwks to verify them
  */
 
 type outputter interface {

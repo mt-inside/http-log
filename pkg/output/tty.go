@@ -143,6 +143,28 @@ func (o Tty) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf("=> %s\n", o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
 }
 
+// func (o Tty) AuthSummary(r *http.Request) {
+// 	token, err := request.ParseFromRequest(
+// 		r,
+// 		request.OAuth2Extractor, // Looks for `Authorization: Bearer foo` or body field `access_token`
+// 		func(token *jwt.Token) (interface{}, error) { panic(errors.New("don't call me")) },
+// 		request.WithClaims(&jwt.RegisteredClaims{}),
+// 		request.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
+// 	)
+
+// 	fmt.Println("Token valid?", RenderYesError(err))
+
+// 	spew.Dump(token.Claims)
+// 	claims := token.Claims.(*jwt.RegisteredClaims)
+// 	fmt.Printf(
+// 		"JWT subj %s iss %s [%s -> %s]\n",
+// 		o.s.Bright(claims.Subject),
+// 		o.s.Bright(claims.Issuer),
+// 		RenderTime(claims.NotBefore, true),
+// 		RenderTime(claims.ExpiresAt, false),
+// 	)
+// }
+
 // BodySummary summarises the application-layer request body
 func (o Tty) BodySummary(contentType string, contentLength int64, bs []byte) {
 	bodyLen := len(bs)
