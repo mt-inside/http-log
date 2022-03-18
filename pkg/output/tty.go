@@ -3,15 +3,12 @@ package output
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang-jwt/jwt/v4/request"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
@@ -146,34 +143,54 @@ func (o Tty) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf("=> %s\n", o.au.Magenta(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
 }
 
-// AuthSummary summarises the authentication and authorization credentials in the request
-func (o Tty) AuthSummary(r *http.Request) {
-}
+func (o Tty) jwtCommon(start, end *time.Time, ID, subject, issuer string, audience []string) {
 
-// AuthFull prints detailed information about the authentication and authorization credentials in the request
-func (o Tty) AuthFull(r *http.Request) {
-	var keyFunc func(token *jwt.Token) (interface{}, error) = nil
-	if true { // FIXME
-		bytes, err := ioutil.ReadFile("/home/matt/work/personal/talks/istio-demo-master/42-jwt-pki/public.pem") // FIXME
-		utils.CheckErr(err)
+	fmt.Printf("%s JWT [", o.s.Info(getTimestamp()))
+	if start != nil {
+		fmt.Print(utils.RenderTime(*start, true).String()) // TODO RenderTime should be in here cause it's really ColorizeTime
+	} else {
+		fmt.Print(o.s.Fail("?").String())
+	}
+	fmt.Print(" -> ")
+	if end != nil {
+		fmt.Print(utils.RenderTime(*end, false).String()) // TODO RenderTime should be in here cause it's really ColorizeTime
+	} else {
+		fmt.Print(o.s.Fail("?").String())
+	}
+	fmt.Print("]")
 
-		publicKey, err := utils.ParsePublicKey(o.log, bytes)
-		utils.CheckErr(err)
-
-		keyFunc = func(token *jwt.Token) (interface{}, error) { return publicKey, err }
+	if ID != "" {
+		fmt.Printf(" id %s", o.s.Bright(ID))
 	}
 
-	token, err := request.ParseFromRequest(
-		r,
-		request.OAuth2Extractor, // Looks for `Authorization: Bearer foo` or body field `access_token`
-		keyFunc,
-		request.WithClaims(&jwt.RegisteredClaims{}),
-		request.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
-	)
+	if subject != "" {
+		fmt.Printf(" subj %s", o.s.Noun(subject))
+	}
 
-	fmt.Println("JWT", o.s.JWTClaims(token))
-	fmt.Printf("\t%s\n", o.s.JWTMeta(token))
-	fmt.Println("\tvalid?", utils.RenderYesError(err))
+	if issuer != "" {
+		fmt.Printf(" iss %s", o.s.Noun(issuer))
+	}
+
+	if len(audience) != 0 {
+		fmt.Printf(" aud %v", audience) // TODO: dat list colorizer
+	}
+}
+
+// JWTSummary summarises the JWT in the request
+func (o Tty) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
+	o.jwtCommon(start, end, ID, subject, issuer, audience)
+	fmt.Printf(" [valid? %s]", utils.RenderYesError(tokenErr))
+	fmt.Println()
+}
+
+// JWTFull prints detailed information about the JWT in the request
+func (o Tty) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
+	o.jwtCommon(start, end, ID, subject, issuer, audience)
+	fmt.Println()
+
+	fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
+
+	fmt.Println("\tvalid?", utils.RenderYesError(tokenErr))
 }
 
 // BodySummary summarises the application-layer request body
