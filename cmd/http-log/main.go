@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
 	"github.com/jessevdk/go-flags"
 	"github.com/mattn/go-isatty"
@@ -30,6 +31,11 @@ import (
 *   credentials
 *   - decode JWTs, allow supply of jwks to verify them
  */
+
+func init() {
+	spew.Config.DisableMethods = true
+	spew.Config.DisablePointerMethods = true
+}
 
 type outputter interface {
 	TLSNegSummary(cs *tls.ClientHelloInfo)
