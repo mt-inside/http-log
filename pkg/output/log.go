@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -90,12 +92,32 @@ func (o Log) HeadFull(r *http.Request, respCode int) {
 	log.Info("response", "status", respCode)
 }
 
-// AuthSummary summarises the authentication and authorization credentials in the request
-func (o Log) AuthSummary(r *http.Request) {
+// JWTSummary summarises the JWT in the request
+func (o Log) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
+	log := o.log.WithName("Auth").WithName("JWT")
+
+	log.Info(
+		"claims",
+		"start", start.Format(time.RFC3339),
+		"end", end.Format(time.RFC3339),
+		"id", ID,
+		"sub", subject,
+		"iss", issuer,
+		"aud", strings.Join(audience, ","),
+	)
 }
 
-// AuthFull prints detailed information about the authentication and authorization credentials in the request
-func (o Log) AuthFull(r *http.Request) {
+// JWTFull prints detailed information about the JWT in the request
+func (o Log) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
+	o.JWTSummary(tokenErr, start, end, ID, subject, issuer, audience)
+
+	log := o.log.WithName("Auth").WithName("JWT")
+
+	log.Info(
+		"signature",
+		"algo", sigAlgo,
+		"hash", hashAlgo,
+	)
 }
 
 // BodySummary summarises the application-layer request body

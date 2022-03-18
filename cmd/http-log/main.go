@@ -44,8 +44,8 @@ type outputter interface {
 	TransportFull(cs *tls.ConnectionState)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
-	AuthSummary(r *http.Request)
-	AuthFull(r *http.Request)
+	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
+	JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
 	BodySummary(contentType string, contentLength int64, body []byte)
 	BodyFull(contentType string, contentLength int64, body []byte)
 }
@@ -64,13 +64,21 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Headers */
 
 	userAgent, _ := getHeader(r, "User-Agent")
+	jwt, jwtErr, jwtFound := codec.TryExtractJWT(lm.log, r, opts.JWTValidatePath)
+
 	if opts.HeadFull {
 		lm.output.HeadFull(r, opts.Status)
-		lm.output.AuthFull(r)
+		if jwtFound {
+			start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo := codec.JWT(jwt)
+			lm.output.JWTFull(jwtErr, start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo)
+		}
 	} else if opts.HeadSummary {
 		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
 		lm.output.HeadSummary(r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
-		lm.output.AuthSummary(r)
+		if jwtFound {
+			start, end, ID, subject, issuer, audience, _, _ := codec.JWT(jwt)
+			lm.output.JWTSummary(jwtErr, start, end, ID, subject, issuer, audience)
+		}
 	}
 
 	/* Body */
@@ -104,6 +112,7 @@ var opts struct {
 	TransportFull      bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
 	HeadSummary        bool   `short:"m" long:"head" description:"Print important header values"`
 	HeadFull           bool   `short:"M" long:"head-full" description:"Print entire request head"`
+	JWTValidatePath    string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
 	BodySummary        bool   `short:"b" long:"body" description:"Print truncated body"`
 	BodyFull           bool   `short:"B" long:"body-full" description:"Print full body"`
 	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
