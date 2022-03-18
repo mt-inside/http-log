@@ -2,7 +2,6 @@ package output
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,53 +10,47 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// Log is an output implementation that logs using zapr
-type Log struct {
+// LogRenderer is an output implementation that logs using zapr
+type LogRenderer struct {
 	log logr.Logger
 }
 
-// NewLog returns a new outputter than logs using zapr
-func NewLog(log logr.Logger) Log {
-	return Log{log}
+// NewLogRenderer returns a new outputter than logs using zapr
+func NewLogRenderer(log logr.Logger) LogRenderer {
+	return LogRenderer{log}
 }
 
 // TLSNegSummary summarises the TLS negotiation
-func (o Log) TLSNegSummary(hi *tls.ClientHelloInfo) {
+func (o LogRenderer) TLSNegSummary(hi *tls.ClientHelloInfo) {
 	log := o.log.WithName("Transport")
 	log.Info("negotiation", "sni", hi.ServerName)
 }
 
 // TLSNegFull prints full details on the TLS negotiation
-func (o Log) TLSNegFull(hi *tls.ClientHelloInfo) {
+func (o LogRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 	o.TLSNegSummary(hi)
 
 	log := o.log.WithName("Transport")
-	log.Info("supported", "versions", renderTLSVersionNames(hi.SupportedVersions))
-	// On the use of %v
-	// - this Just Works - sees its and array of fmt.Stringers, gets on with it
-	// - logr docs strongly imply that .String() will be called on a passed object, but I think that's shallow; does the object in hand implement fmt.Stringer; won't look for an array of fmt.Stringers
-	// - logr has a Marshaler interface that you can implement to override printing behaviour, but in Go we can't implement that for []Foo
-	// - can't write a generic method that maps Foo -> string cause there's no variance on arrays so can't pass []T as []interface{} (or []Stringer)
-	// - TODO KISS: renderFoo() functionS that all take their specfic type and go []Foo -> []string. Can then be used here and passed to renderStyledList() in TTY + print-cert
-	log.Info("supported", "cert types", fmt.Sprintf("%v", hi.SignatureSchemes))
-	log.Info("supported", "cert curves", fmt.Sprintf("%v", hi.SupportedCurves))
-	log.Info("supported", "symmetric cypher suites", renderCipherSuiteNames(hi.CipherSuites))
+	log.Info("supported", "versions", TLSVersions2Strings(hi.SupportedVersions))
+	log.Info("supported", "cert types", SignatureSchemes2Strings(hi.SignatureSchemes))
+	log.Info("supported", "cert curves", Curves2Strings(hi.SupportedCurves))
+	log.Info("supported", "symmetric cypher suites", CipherSuites2Strings(hi.CipherSuites))
 	log.Info("supported", "ALPN protocols", hi.SupportedProtos)
 }
 
 // TransportSummary summarises the connection transport
-func (o Log) TransportSummary(cs *tls.ConnectionState) {
+func (o LogRenderer) TransportSummary(cs *tls.ConnectionState) {
 	log := o.log.WithName("Transport")
 	log.Info(
 		"agreed",
 		"sni", cs.ServerName,
-		"version", tlsVersionName(cs.Version),
+		"version", TLSVersionName(cs.Version),
 		"alpn", cs.NegotiatedProtocol,
 	)
 }
 
 // TransportFull prints full details on the connection transport
-func (o Log) TransportFull(cs *tls.ConnectionState) {
+func (o LogRenderer) TransportFull(cs *tls.ConnectionState) {
 	o.TransportSummary(cs)
 
 	log := o.log.WithName("Transport")
@@ -65,7 +58,7 @@ func (o Log) TransportFull(cs *tls.ConnectionState) {
 }
 
 // HeadSummary summarises the application-layer request header
-func (o Log) HeadSummary(proto, method, host, ua string, url *url.URL, respCode int) {
+func (o LogRenderer) HeadSummary(proto, method, host, ua string, url *url.URL, respCode int) {
 	log := o.log.WithName("HTTP")
 	log.Info(
 		"request",
@@ -79,7 +72,7 @@ func (o Log) HeadSummary(proto, method, host, ua string, url *url.URL, respCode 
 }
 
 // HeadFull prints full contents of the application-layer request header
-func (o Log) HeadFull(r *http.Request, respCode int) {
+func (o LogRenderer) HeadFull(r *http.Request, respCode int) {
 	log := o.log.WithName("HTTP")
 	log.Info("request", "proto", r.Proto)
 	log.Info("request", "method", r.Method)
@@ -93,7 +86,7 @@ func (o Log) HeadFull(r *http.Request, respCode int) {
 }
 
 // JWTSummary summarises the JWT in the request
-func (o Log) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
+func (o LogRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
 	log := o.log.WithName("Auth").WithName("JWT")
 
 	log.Info(
@@ -108,7 +101,7 @@ func (o Log) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issu
 }
 
 // JWTFull prints detailed information about the JWT in the request
-func (o Log) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
+func (o LogRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
 	o.JWTSummary(tokenErr, start, end, ID, subject, issuer, audience)
 
 	log := o.log.WithName("Auth").WithName("JWT")
@@ -121,7 +114,7 @@ func (o Log) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer 
 }
 
 // BodySummary summarises the application-layer request body
-func (o Log) BodySummary(contentType string, contentLength int64, bs []byte) {
+func (o LogRenderer) BodySummary(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("Body")
 	bodyLen := len(bs)
 	printLen := min(bodyLen, 72)
@@ -135,7 +128,7 @@ func (o Log) BodySummary(contentType string, contentLength int64, bs []byte) {
 }
 
 // BodyFull prints full contents of the application-layer request body
-func (o Log) BodyFull(contentType string, contentLength int64, bs []byte) {
+func (o LogRenderer) BodyFull(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("Body")
 	log.Info("Full",
 		"len", contentLength,
