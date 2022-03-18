@@ -217,6 +217,7 @@ func main() {
 
 	if opts.TLSAlgo != "off" {
 		srv.TLSConfig = &tls.Config{
+			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				b.Trace("TLS ClientHello received")

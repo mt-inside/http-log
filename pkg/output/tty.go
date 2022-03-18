@@ -79,24 +79,35 @@ func (o TtyRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
 }
 
-// TransportSummary summarises the connection transport
-func (o TtyRenderer) TransportSummary(cs *tls.ConnectionState) {
+func (o TtyRenderer) transportCommon(cs *tls.ConnectionState) {
 	fmt.Printf("%s sni %s agreed: %s alpn %s\n",
 		o.s.Info(getTimestamp()),
 		o.s.Addr(cs.ServerName),
 		o.s.Noun(TLSVersionName(cs.Version)),
 		o.s.Noun(cs.NegotiatedProtocol),
 	)
+}
 
-	//TODO: printbasiccertinfo(peercers[0])
+// TransportSummary summarises the connection transport
+func (o TtyRenderer) TransportSummary(cs *tls.ConnectionState) {
+	o.transportCommon(cs)
+
+	if len(cs.PeerCertificates) > 0 {
+		fmt.Printf("%s x509 %s\n", o.s.Info(getTimestamp()), o.s.CertSummary(cs.PeerCertificates[0]))
+	}
 }
 
 // TransportFull prints full details on the connection transport
 func (o TtyRenderer) TransportFull(cs *tls.ConnectionState) {
-	o.TransportSummary(cs)
+	o.transportCommon(cs)
+
 	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
 
-	// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
+	if len(cs.PeerCertificates) > 0 {
+		fmt.Printf("%s x509\n", o.s.Info(getTimestamp()))
+		// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
+		o.s.ClientCertChain(cs.PeerCertificates)
+	}
 }
 
 // HeadSummary summarises the application-layer request header

@@ -184,11 +184,14 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 }
 
 // TODO should return string really
-func (s TtyStyler) ClientCertChain(certs ...*x509.Certificate) {
+func (s TtyStyler) ClientCertChain(certs []*x509.Certificate) {
 	for i, cert := range certs {
 		fmt.Printf("\t%d: %s\n", i, s.CertSummary(cert))
 	}
 	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
+
+	// TODO: a lot of the stuff from serving, eg validation
+	// - infact I think the only difference is that we don't print SANs in this one
 }
 
 // TODO should return string really
