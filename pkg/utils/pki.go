@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 var (
@@ -29,7 +29,9 @@ func init() {
 	certCache = make(map[string]*tls.Certificate)
 }
 
-func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+
+	log := b.GetLogger().WithName("GenCertPair")
 
 	if len(settings.DNSNames) > 1 {
 		panic(errors.New("only support one SAN atm"))
@@ -172,7 +174,7 @@ func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 	return &pair, err
 }
 
-func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
+func GenSelfSignedCa(b output.Bios, algo string) (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
@@ -187,10 +189,12 @@ func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return GenCertPair(log, caSettings, nil, algo)
+	return GenCertPair(b, caSettings, nil, algo)
 }
 
-func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func GenServingCert(b output.Bios, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+
+	log := b.GetLogger()
 
 	log.V(1).Info("TLS: get serving cert callback")
 
@@ -211,26 +215,5 @@ func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return GenCertPair(log, servingSettings, parent, algo)
-}
-
-func ParsePublicKey(log logr.Logger, key []byte) (crypto.PublicKey, error) {
-
-	var err error
-
-	var block *pem.Block
-	if block, _ = pem.Decode(key); block == nil {
-		return nil, errors.New("File does not contain PEM-encoded data")
-	}
-
-	var parsedKey interface{}
-	if parsedKey, err = x509.ParsePKIXPublicKey(block.Bytes); err != nil {
-		if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
-			parsedKey = cert.PublicKey
-		} else {
-			return nil, err
-		}
-	}
-
-	return parsedKey, nil
+	return GenCertPair(b, servingSettings, parent, algo)
 }

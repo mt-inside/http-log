@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/go-logr/logr"
 	"github.com/jessevdk/go-flags"
+	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
-	"github.com/mt-inside/go-usvc"
 
+	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/utils"
@@ -37,7 +37,7 @@ func init() {
 	spew.Config.DisablePointerMethods = true
 }
 
-type outputter interface {
+type renderer interface {
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
 	TransportSummary(cs *tls.ConnectionState)
@@ -53,9 +53,9 @@ type outputter interface {
 var requestNo uint
 
 type logMiddle struct {
-	log    logr.Logger
+	b      output.Bios
 	next   http.Handler
-	output outputter
+	output renderer
 	caPair *tls.Certificate
 }
 
@@ -64,7 +64,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Headers */
 
 	userAgent, _ := getHeader(r, "User-Agent")
-	jwt, jwtErr, jwtFound := codec.TryExtractJWT(lm.log, r, opts.JWTValidatePath)
+	jwt, jwtErr, jwtFound := codec.TryExtractJWT(lm.b, r, opts.JWTValidatePath)
 
 	if opts.HeadFull {
 		lm.output.HeadFull(r, opts.Status)
@@ -87,9 +87,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Print only if the method would traditionally have a body, or one has been sent
 	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
 		bs, err := io.ReadAll(r.Body)
-		if err != nil {
-			lm.log.Error(err, "failed to get body")
-		}
+		lm.b.CheckErr(err)
 
 		if opts.BodyFull {
 			lm.output.BodyFull(contentType, r.ContentLength, bs)
@@ -122,36 +120,44 @@ var opts struct {
 
 func main() {
 
-	log := usvc.GetLogger(false)
-
 	_, err := flags.Parse(&opts)
+
+	if opts.Output == "auto" {
+		if isatty.IsTerminal(os.Stdout.Fd()) {
+			opts.Output = "pretty"
+		} else {
+			opts.Output = "json"
+		}
+	}
+
+	//var s output.TtyStyler // TODO iface when log styler
+	var b output.Bios
+	var op renderer
+	switch opts.Output {
+	case "text":
+		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
+		b = output.NewTtyBios(s)
+		op = output.NewTtyRenderer(s)
+	case "pretty":
+		s := output.NewTtyStyler(aurora.NewAurora(true)) // color
+		b = output.NewTtyBios(s)
+		op = output.NewTtyRenderer(s)
+	case "json":
+		l := usvc.GetLogger(false, 10)
+		b = output.NewLogBios(l)
+		op = output.NewLogRenderer(l)
+	default:
+		panic(errors.New("bottom"))
+	}
+
+	b.Trace("http-log", "version", "0.5")
+
 	if err != nil {
 		panic(err)
 	}
 	if !opts.TransportSummary && !opts.TransportFull && !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
 	}
-
-	log.Info("http-log v0.5")
-
-	var op outputter
-	switch opts.Output {
-	case "text":
-		op = output.NewTty(log, false) // no color
-	case "pretty":
-		op = output.NewTty(log, true) // color
-	case "json":
-		op = output.NewLog(log)
-	case "auto":
-		if isatty.IsTerminal(os.Stdout.Fd()) {
-			op = output.NewTty(log, true)
-		} else {
-			op = output.NewLog(log)
-		}
-	default:
-		panic(errors.New("bottom"))
-	}
-
 	/*
 		TODO
 		* make a client that prints (in color) http server details - canonical DNS name, ip, cert details inc sans, server header, ALPN details, based on print-cert
@@ -171,13 +177,13 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", handler)
 	loggingMux := &logMiddle{
-		log:    log,
+		b:      b,
 		next:   mux,
 		output: op,
 	}
 
 	if opts.TLSAlgo != "off" {
-		loggingMux.caPair, err = utils.GenSelfSignedCa(loggingMux.log, opts.TLSAlgo)
+		loggingMux.caPair, err = utils.GenSelfSignedCa(b, opts.TLSAlgo)
 		if err != nil {
 			panic(err)
 		}
@@ -192,20 +198,20 @@ func main() {
 		BaseContext: func(l net.Listener) context.Context {
 			switch l.(type) {
 			case *net.TCPListener:
-				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
+				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
 			default: // *tls.listener assumed
-				log.Info("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TLSAlgo)
+				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TLSAlgo)
 			}
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			requestNo++ // Think everything is single-threaded...
-			log.V(1).Info("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
+			b.Trace("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
 
 			return ctx
 		},
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			log.V(1).Info("HTTP server connection state change", "State", cs)
+			b.Trace("HTTP server connection state change", "State", cs)
 		},
 	}
 
@@ -213,7 +219,7 @@ func main() {
 		srv.TLSConfig = &tls.Config{
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				log.V(1).Info("TLS ClientHello received")
+				b.Trace("TLS ClientHello received")
 
 				if opts.NegotiationFull {
 					op.TLSNegFull(hi)
@@ -224,14 +230,14 @@ func main() {
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				return utils.GenServingCert(loggingMux.log, hi, loggingMux.caPair, opts.TLSAlgo)
+				return utils.GenServingCert(b, hi, loggingMux.caPair, opts.TLSAlgo)
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				log.V(1).Info("TLS built-in cert verification finished")
+				b.Trace("TLS built-in cert verification finished")
 				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.V(1).Info("TLS: all cert verification finished")
+				b.Trace("TLS: all cert verification finished")
 
 				if opts.TransportFull {
 					op.TransportFull(&cs)
@@ -243,9 +249,11 @@ func main() {
 				return nil // can inspect all connection and TLS info and reject
 			},
 		}
-		log.Error(srv.ListenAndServeTLS("", ""), "Shutting down")
+		b.CheckErr(srv.ListenAndServeTLS("", ""))
+		b.Trace("Shutting down")
 	} else {
-		log.Error(srv.ListenAndServe(), "Shutting down")
+		b.CheckErr(srv.ListenAndServe())
+		b.Trace("Shutting down")
 	}
 }
 

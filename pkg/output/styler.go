@@ -1,13 +1,20 @@
 package output
 
 import (
+	"crypto/x509"
+	"errors"
+	"fmt"
+	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/logrusorgru/aurora/v3"
 )
 
-type Styler struct {
+const TimeFmt = "2006 Jan _2 15:04:05"
+
+type TtyStyler struct {
 	au aurora.Aurora
 
 	InfoStyle   aurora.Color
@@ -20,8 +27,8 @@ type Styler struct {
 	BrightStyle aurora.Color
 }
 
-func NewStyler(au aurora.Aurora) Styler {
-	return Styler{
+func NewTtyStyler(au aurora.Aurora) TtyStyler {
+	return TtyStyler{
 		au:          au,
 		InfoStyle:   aurora.BlackFg | aurora.BrightFg,
 		FailStyle:   aurora.RedFg,
@@ -34,32 +41,32 @@ func NewStyler(au aurora.Aurora) Styler {
 	}
 }
 
-func (s Styler) Info(str string) aurora.Value {
+func (s TtyStyler) Info(str string) aurora.Value {
 	return s.au.Colorize(str, s.InfoStyle)
 }
-func (s Styler) Fail(str string) aurora.Value {
+func (s TtyStyler) Fail(str string) aurora.Value {
 	return s.au.Colorize(str, s.FailStyle)
 }
-func (s Styler) Ok(str string) aurora.Value {
+func (s TtyStyler) Ok(str string) aurora.Value {
 	return s.au.Colorize(str, s.OkStyle)
 }
-func (s Styler) Warn(str string) aurora.Value {
+func (s TtyStyler) Warn(str string) aurora.Value {
 	return s.au.Colorize(str, s.WarnStyle)
 }
-func (s Styler) Addr(str string) aurora.Value {
+func (s TtyStyler) Addr(str string) aurora.Value {
 	return s.au.Colorize(str, s.AddrStyle)
 }
-func (s Styler) Verb(str string) aurora.Value {
+func (s TtyStyler) Verb(str string) aurora.Value {
 	return s.au.Colorize(str, s.VerbStyle)
 }
-func (s Styler) Noun(str string) aurora.Value {
+func (s TtyStyler) Noun(str string) aurora.Value {
 	return s.au.Colorize(str, s.NounStyle)
 }
-func (s Styler) Bright(v interface{}) aurora.Value {
+func (s TtyStyler) Bright(v interface{}) aurora.Value {
 	return s.au.Colorize(v, s.BrightStyle)
 }
 
-func (s Styler) UrlPath(u *url.URL) string {
+func (s TtyStyler) UrlPath(u *url.URL) string {
 	var b strings.Builder
 
 	if len(u.EscapedPath()) > 0 {
@@ -79,4 +86,150 @@ func (s Styler) UrlPath(u *url.URL) string {
 	}
 
 	return b.String()
+}
+
+func (s TtyStyler) Time(t time.Time, start bool) aurora.Value {
+	if start {
+		if t.After(time.Now()) {
+			return aurora.Colorize(t.Format(TimeFmt), s.FailStyle)
+		} else {
+			return aurora.Colorize(t.Format(TimeFmt), s.OkStyle)
+		}
+	} else {
+		if t.Before(time.Now()) {
+			return aurora.Colorize(t.Format(TimeFmt), s.FailStyle)
+		} else if t.Before(time.Now().Add(240 * time.Hour)) {
+			return aurora.Colorize(t.Format(TimeFmt), s.WarnStyle)
+		} else {
+			return aurora.Colorize(t.Format(TimeFmt), s.OkStyle)
+		}
+	}
+}
+
+func (s TtyStyler) YesNo(test bool) aurora.Value {
+	if test {
+		return aurora.Colorize("yes", s.OkStyle)
+	}
+	return aurora.Colorize("no", s.FailStyle)
+}
+
+func (s TtyStyler) YesError(err error) aurora.Value {
+	if err == nil {
+		return aurora.Colorize("yes", s.OkStyle)
+	}
+	return aurora.Colorize(err, s.FailStyle)
+}
+
+func (s TtyStyler) OptionalString(msg string, style aurora.Color) aurora.Value {
+	if msg == "" {
+		return aurora.Colorize("<none>", s.InfoStyle)
+	}
+	return aurora.Colorize(msg, style)
+}
+
+func (s TtyStyler) List(ins []string, style aurora.Color) string {
+	if len(ins) == 0 {
+		return aurora.Colorize("<none>", s.InfoStyle).String()
+	}
+
+	printLen := 0
+	op := ""
+	for i, in := range ins {
+		newPrintLen := printLen + len(in) // without the escape sequences
+		if i != len(ins)-1 {
+			newPrintLen += len(", ")
+		}
+
+		// TODO better algo (it has a problem, think ;)
+		if newPrintLen > 80 {
+			op += aurora.Colorize(in[:min(80-printLen, len(in)-1)], style).String()
+			op += "..."
+			break
+		}
+
+		op += aurora.Colorize(in, style).String()
+		if i != len(ins)-1 {
+			op += ", "
+		}
+
+		printLen = newPrintLen
+	}
+
+	return op
+}
+
+func (s TtyStyler) Issuer(cert *x509.Certificate) aurora.Value {
+	if cert.Issuer.String() == cert.Subject.String() {
+		return aurora.Colorize("<self-signed>", s.InfoStyle)
+	}
+	return aurora.Colorize(cert.Issuer.String(), s.AddrStyle)
+}
+
+func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
+	caFlag := aurora.Colorize("non-ca", s.InfoStyle)
+	if cert.IsCA {
+		caFlag = aurora.Colorize("ca", s.OkStyle)
+	}
+
+	return fmt.Sprintf(
+		"[%s -> %s] key %s sig %s subj %s [%s]",
+		s.Time(cert.NotBefore, true),
+		s.Time(cert.NotAfter, false),
+		aurora.Colorize(PublicKeyInfo(cert.PublicKey), s.NounStyle),
+		aurora.Colorize(cert.SignatureAlgorithm, s.NounStyle),
+		aurora.Colorize(cert.Subject.String(), s.AddrStyle),
+		// No need to print Issuer, cause that's the Subject of the next cert in the chain
+		caFlag,
+	)
+}
+
+// TODO should return string really
+func (s TtyStyler) ClientCertChain(certs ...*x509.Certificate) {
+	for i, cert := range certs {
+		fmt.Printf("\t%d: %s\n", i, s.CertSummary(cert))
+	}
+	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
+}
+
+// TODO should return string really
+func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts []*x509.Certificate, verifiedCerts []*x509.Certificate) {
+	var addr string
+	if name != nil {
+		addr = *name
+	} else if ip != nil {
+		addr = "[" + ip.String() + "]"
+	} else {
+		panic(errors.New("Need either a name or IP to check serving cert against"))
+	}
+
+	head := peerCerts[0]
+
+	fmt.Printf("\t0 (presented): %s\n", s.CertSummary(head))
+	fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+	fmt.Printf("\t\tIP SANs %s\n", s.List(IPs2Strings(head.IPAddresses), s.AddrStyle))
+	fmt.Printf(
+		"\t\tSNI %s in SANs? %s (CN? %s)\n",
+		aurora.Colorize(*name, s.AddrStyle),
+		s.YesError(head.VerifyHostname(addr)),
+		s.YesNo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
+	)
+
+	certs := verifiedCerts
+	if certs == nil {
+		certs = peerCerts
+	}
+
+	for i := 1; i < len(certs); i++ {
+		fmt.Printf("\t%d", i)
+
+		if i < len(peerCerts) && certs[i].Equal(peerCerts[i]) {
+			fmt.Printf(" (presented):")
+		} else {
+			fmt.Printf(" (installed):")
+		}
+
+		fmt.Printf(" %s\n", s.CertSummary(certs[i]))
+	}
+
+	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
 }
