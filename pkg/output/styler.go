@@ -70,9 +70,9 @@ func (s TtyStyler) UrlPath(u *url.URL) string {
 	var b strings.Builder
 
 	if len(u.EscapedPath()) > 0 {
-		b.WriteString(s.Noun(u.EscapedPath()).String())
+		b.WriteString(s.Addr(u.EscapedPath()).String())
 	} else {
-		b.WriteString(s.Noun("/").String())
+		b.WriteString(s.Addr("/").String())
 	}
 
 	if len(u.RawQuery) > 0 {
