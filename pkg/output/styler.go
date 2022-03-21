@@ -91,45 +91,45 @@ func (s TtyStyler) UrlPath(u *url.URL) string {
 func (s TtyStyler) Time(t time.Time, start bool) aurora.Value {
 	if start {
 		if t.After(time.Now()) {
-			return aurora.Colorize(t.Format(TimeFmt), s.FailStyle)
+			return s.au.Colorize(t.Format(TimeFmt), s.FailStyle)
 		} else {
-			return aurora.Colorize(t.Format(TimeFmt), s.OkStyle)
+			return s.au.Colorize(t.Format(TimeFmt), s.OkStyle)
 		}
 	} else {
 		if t.Before(time.Now()) {
-			return aurora.Colorize(t.Format(TimeFmt), s.FailStyle)
+			return s.au.Colorize(t.Format(TimeFmt), s.FailStyle)
 		} else if t.Before(time.Now().Add(240 * time.Hour)) {
-			return aurora.Colorize(t.Format(TimeFmt), s.WarnStyle)
+			return s.au.Colorize(t.Format(TimeFmt), s.WarnStyle)
 		} else {
-			return aurora.Colorize(t.Format(TimeFmt), s.OkStyle)
+			return s.au.Colorize(t.Format(TimeFmt), s.OkStyle)
 		}
 	}
 }
 
 func (s TtyStyler) YesNo(test bool) aurora.Value {
 	if test {
-		return aurora.Colorize("yes", s.OkStyle)
+		return s.au.Colorize("yes", s.OkStyle)
 	}
-	return aurora.Colorize("no", s.FailStyle)
+	return s.au.Colorize("no", s.FailStyle)
 }
 
 func (s TtyStyler) YesError(err error) aurora.Value {
 	if err == nil {
-		return aurora.Colorize("yes", s.OkStyle)
+		return s.au.Colorize("yes", s.OkStyle)
 	}
-	return aurora.Colorize(err, s.FailStyle)
+	return s.au.Colorize(err, s.FailStyle)
 }
 
 func (s TtyStyler) OptionalString(msg string, style aurora.Color) aurora.Value {
 	if msg == "" {
-		return aurora.Colorize("<none>", s.InfoStyle)
+		return s.au.Colorize("<none>", s.InfoStyle)
 	}
-	return aurora.Colorize(msg, style)
+	return s.au.Colorize(msg, style)
 }
 
 func (s TtyStyler) List(ins []string, style aurora.Color) string {
 	if len(ins) == 0 {
-		return aurora.Colorize("<none>", s.InfoStyle).String()
+		return s.au.Colorize("<none>", s.InfoStyle).String()
 	}
 
 	printLen := 0
@@ -142,12 +142,12 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 
 		// TODO better algo (it has a problem, think ;)
 		if newPrintLen > 80 {
-			op += aurora.Colorize(in[:min(80-printLen, len(in)-1)], style).String()
+			op += s.au.Colorize(in[:min(80-printLen, len(in)-1)], style).String()
 			op += "..."
 			break
 		}
 
-		op += aurora.Colorize(in, style).String()
+		op += s.au.Colorize(in, style).String()
 		if i != len(ins)-1 {
 			op += ", "
 		}
@@ -160,24 +160,24 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 
 func (s TtyStyler) Issuer(cert *x509.Certificate) aurora.Value {
 	if cert.Issuer.String() == cert.Subject.String() {
-		return aurora.Colorize("<self-signed>", s.InfoStyle)
+		return s.au.Colorize("<self-signed>", s.InfoStyle)
 	}
-	return aurora.Colorize(cert.Issuer.String(), s.AddrStyle)
+	return s.au.Colorize(cert.Issuer.String(), s.AddrStyle)
 }
 
 func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
-	caFlag := aurora.Colorize("non-ca", s.InfoStyle)
+	caFlag := s.au.Colorize("non-ca", s.InfoStyle)
 	if cert.IsCA {
-		caFlag = aurora.Colorize("ca", s.OkStyle)
+		caFlag = s.au.Colorize("ca", s.OkStyle)
 	}
 
 	return fmt.Sprintf(
 		"[%s -> %s] key %s sig %s subj %s [%s]",
 		s.Time(cert.NotBefore, true),
 		s.Time(cert.NotAfter, false),
-		aurora.Colorize(PublicKeyInfo(cert.PublicKey), s.NounStyle),
-		aurora.Colorize(cert.SignatureAlgorithm, s.NounStyle),
-		aurora.Colorize(cert.Subject.String(), s.AddrStyle),
+		s.au.Colorize(PublicKeyInfo(cert.PublicKey), s.NounStyle),
+		s.au.Colorize(cert.SignatureAlgorithm, s.NounStyle),
+		s.au.Colorize(cert.Subject.String(), s.AddrStyle),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		caFlag,
 	)
@@ -212,7 +212,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts []*x509.
 	fmt.Printf("\t\tIP SANs %s\n", s.List(IPs2Strings(head.IPAddresses), s.AddrStyle))
 	fmt.Printf(
 		"\t\tSNI %s in SANs? %s (CN? %s)\n",
-		aurora.Colorize(*name, s.AddrStyle),
+		s.au.Colorize(*name, s.AddrStyle),
 		s.YesError(head.VerifyHostname(addr)),
 		s.YesNo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
 	)
