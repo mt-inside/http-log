@@ -48,11 +48,12 @@ func CipherSuites2Strings(cs []uint16) []string {
 }
 
 func PublicKeyInfo(pk crypto.PublicKey) string {
+	// Note on the comments: although this is renderPUBLICkey, we wanna print the private key size cause that's what matters, so try to derive it from what we've got
 	switch pubKey := pk.(type) {
 	case *rsa.PublicKey:
 		return fmt.Sprintf("RSA:%d", pubKey.Size()*8) // private and public are same; it's the length of the shared modulus
 	case *ecdsa.PublicKey:
-		return fmt.Sprintf("ECDSA:%s", pubKey.Params().Name) // private and public are same; it's a fundamental property of the curve, implied by the curve name
+		return fmt.Sprintf("ECDSA:%s", pubKey.Params().Name) // private and public are same; it's a fundamental property of the curve, implied by the curve name. That's /technically/ the curve size (whatever that means)
 	case ed25519.PublicKey:
 		return fmt.Sprintf("Ed25519(%d)", ed25519.PrivateKeySize*8) // Constant size
 	default:

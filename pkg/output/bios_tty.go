@@ -33,26 +33,35 @@ func (b TtyBios) GetLogger() logr.Logger {
 	return b.log.V(1)
 }
 
+func (b TtyBios) PrintInfo(msg string) {
+	fmt.Printf("%s %s\n", b.s.Info("Info"), msg)
+}
 func (b TtyBios) CheckInfo(err error) bool {
 	if err != nil {
-		fmt.Printf("%s %v\n", b.s.Info("Info"), err)
+		b.PrintInfo(err.Error())
 		return false
 	}
 	return true
 }
 
+func (b TtyBios) PrintWarn(msg string) {
+	fmt.Printf("%s %s\n", b.s.Warn("Warning"), msg)
+}
 func (b TtyBios) CheckWarn(err error) bool {
 	if err != nil {
-		fmt.Printf("%s %v\n", b.s.Warn("Warning"), err)
+		b.PrintWarn(err.Error())
 		return false
 	}
 	return true
 }
 
+func (b TtyBios) PrintErr(msg string) {
+	fmt.Printf("%s %s\n", b.s.Fail("Error"), msg)
+}
 func (b TtyBios) CheckErr(err error) {
 	if err != nil {
 		//panic(err) - for backtraces
-		fmt.Printf("%s %v\n", b.s.Fail("Error"), err)
+		b.PrintErr(err.Error())
 		os.Exit(1)
 	}
 }
