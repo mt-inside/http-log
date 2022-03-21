@@ -113,7 +113,7 @@ var opts struct {
 	JWTValidatePath    string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
 	BodySummary        bool   `short:"b" long:"body" description:"Print truncated body"`
 	BodyFull           bool   `short:"B" long:"body-full" description:"Print full body"`
-	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"json" default:"auto"`
+	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
 	Response           string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
 	Status             int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
