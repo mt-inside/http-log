@@ -118,6 +118,7 @@ var opts struct {
 	Status             int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
+// TODO: cobra
 func main() {
 
 	_, err := flags.Parse(&opts)

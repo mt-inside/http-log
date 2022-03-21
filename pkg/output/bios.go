@@ -9,6 +9,12 @@ type Bios interface {
 	// system/admin stuff, think of this as writing to a log file. Eg tracing through tough algos. Not eg errors opening user-defined files cause that's part of the UI
 	GetLogger() logr.Logger
 
+	//TODO: need a PrintInfo, PrintWarn, PrintErr - they print (whole line) rather than return string. They're like unconditional Check* (which can defer to them). They replace all the SWarning, s.Warngin("warning"), and unconditional CheckErr(errors.New(...))
+	PrintInfo(msg string)
+	PrintWarn(msg string)
+	PrintErr(msg string)
+	//TODO: add a PrintOk, use it quite a lot for eg "connection establised" and "response bodies same"
+
 	CheckInfo(err error) bool
 	CheckWarn(err error) bool
 	CheckErr(err error)
