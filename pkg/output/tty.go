@@ -26,7 +26,7 @@ import (
 * X BIOS iface (checks, banner)
 * - is like commonRenderer - should have evertying that prints. (whole line, multi-line)
 *   - only drivers should be calling bios. If func is called by a renderer, it goes on styler
-*   - check: aurora should only be imported by styler
+*   - X check: aurora should only be imported by styler
 * - Everything that returns a Value is on Styler (no iface case logStyler will return []string)
 *   - if it adds color it MUST add a value so that log things don't call them by accident
 * - Evertyhing that returns a string is in render_utils (logRenderers/Bios prolly call render_utils direct skipping a stlyer)
