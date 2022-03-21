@@ -71,12 +71,12 @@ func (o TtyRenderer) TLSNegSummary(hi *tls.ClientHelloInfo) {
 func (o TtyRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 	o.TLSNegSummary(hi)
 
-	fmt.Printf("\tsupported versions: %v\n", o.s.List(TLSVersions2Strings(hi.SupportedVersions), o.s.NounStyle))
+	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(hi.SupportedVersions), o.s.NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %v\n", o.s.List(SignatureSchemes2Strings(hi.SignatureSchemes), o.s.NounStyle))
-	fmt.Printf("\tsupported cert curves: %v\n", o.s.List(Curves2Strings(hi.SupportedCurves), o.s.NounStyle))
-	fmt.Printf("\tsupported symmetric cypher suites: %v\n", o.s.List(CipherSuites2Strings(hi.CipherSuites), o.s.NounStyle))
-	fmt.Printf("\tsupported ALPN protos: %v\n", hi.SupportedProtos)
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(SignatureSchemes2Strings(hi.SignatureSchemes), o.s.NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Curves2Strings(hi.SupportedCurves), o.s.NounStyle))
+	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(hi.CipherSuites), o.s.NounStyle))
+	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(hi.SupportedProtos, o.s.NounStyle))
 }
 
 func (o TtyRenderer) transportCommon(cs *tls.ConnectionState) {
@@ -182,15 +182,15 @@ func (o TtyRenderer) jwtCommon(start, end *time.Time, ID, subject, issuer string
 	}
 
 	if subject != "" {
-		fmt.Printf(" subj %s", o.s.Noun(subject))
+		fmt.Printf(" subj %s", o.s.Addr(subject))
 	}
 
 	if issuer != "" {
-		fmt.Printf(" iss %s", o.s.Noun(issuer))
+		fmt.Printf(" iss %s", o.s.Addr(issuer))
 	}
 
 	if len(audience) != 0 {
-		fmt.Printf(" aud %v", audience) // TODO: dat list colorizer
+		fmt.Printf(" aud %s", o.s.List(audience, o.s.AddrStyle))
 	}
 }
 
