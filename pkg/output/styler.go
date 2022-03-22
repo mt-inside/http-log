@@ -219,7 +219,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts []*x509.
 		"\t\tSNI %s in SANs? %s (CN? %s)\n",
 		s.au.Colorize(*name, s.AddrStyle),
 		s.YesError(head.VerifyHostname(addr)),
-		s.YesNo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
+		s.YesInfo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
 	)
 
 	certs := verifiedCerts
