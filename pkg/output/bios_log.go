@@ -51,11 +51,13 @@ func (b LogBios) CheckWarn(err error) bool {
 
 func (b LogBios) PrintErr(msg string) {
 	b.l.Error(errors.New(msg), "Error")
+	//panic(err) - for backtraces
+	os.Exit(1)
 }
 func (b LogBios) CheckErr(err error) {
 	if err != nil {
-		//panic(err) - for backtraces
 		b.l.Error(err, "Error")
+		//panic(err) - for backtraces
 		os.Exit(1)
 	}
 }
