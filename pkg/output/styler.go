@@ -112,7 +112,12 @@ func (s TtyStyler) YesNo(test bool) aurora.Value {
 	}
 	return s.au.Colorize("no", s.FailStyle)
 }
-
+func (s TtyStyler) YesInfo(test bool) aurora.Value {
+	if test {
+		return s.au.Colorize("yes", s.OkStyle)
+	}
+	return s.au.Colorize("no", s.InfoStyle)
+}
 func (s TtyStyler) YesError(err error) aurora.Value {
 	if err == nil {
 		return s.au.Colorize("yes", s.OkStyle)
