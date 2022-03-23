@@ -167,9 +167,7 @@ func main() {
 		w.Header().Set("Content-Type", mime)
 		w.WriteHeader(opts.Status)
 		_, err = w.Write(bytes)
-		if err != nil {
-			panic(err)
-		}
+		b.CheckErr(err)
 	}
 
 	mux := &http.ServeMux{}
