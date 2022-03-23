@@ -177,12 +177,12 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 	}
 
 	return fmt.Sprintf(
-		"[%s -> %s] key %s sig %s subj %s [%s]",
+		"[%s -> %s] %s %s sig %s [%s]",
 		s.Time(cert.NotBefore, true),
 		s.Time(cert.NotAfter, false),
+		s.au.Colorize(cert.Subject.String(), s.AddrStyle),
 		s.au.Colorize(PublicKeyInfo(cert.PublicKey), s.NounStyle),
 		s.au.Colorize(cert.SignatureAlgorithm, s.NounStyle),
-		s.au.Colorize(cert.Subject.String(), s.AddrStyle),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		caFlag,
 	)
