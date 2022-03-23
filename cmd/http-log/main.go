@@ -201,6 +201,8 @@ func main() {
 			return context.Background()
 		},
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			// Note: ctx has a bunch of info under context-key "http-server"
+
 			requestNo++ // Think everything is single-threaded...
 			b.Trace("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
 
