@@ -159,10 +159,6 @@ func main() {
 	if !opts.TransportSummary && !opts.TransportFull && !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
 	}
-	/*
-		TODO
-		* make a client that prints (in color) http server details - canonical DNS name, ip, cert details inc sans, server header, ALPN details, based on print-cert
-	*/
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 
