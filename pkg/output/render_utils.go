@@ -11,6 +11,12 @@ import (
 	"net"
 )
 
+func ZipHostsPort(hosts []string, port string) (ret []string) {
+	for _, host := range hosts {
+		ret = append(ret, net.JoinHostPort(host, port))
+	}
+	return
+}
 func IPs2Strings(ips []net.IP) []string {
 	var out []string
 	for _, ip := range ips {
