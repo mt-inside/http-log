@@ -122,6 +122,9 @@ var opts struct {
 func main() {
 
 	_, err := flags.Parse(&opts)
+	if err != nil {
+		panic(err)
+	}
 
 	if opts.Output == "auto" {
 		if isatty.IsTerminal(os.Stdout.Fd()) {
@@ -151,17 +154,16 @@ func main() {
 		panic(errors.New("bottom"))
 	}
 
-	b.Trace("http-log", "version", "0.5")
-
-	if err != nil {
-		panic(err)
-	}
-	if !opts.TransportSummary && !opts.TransportFull && !opts.HeadSummary && !opts.HeadFull && !opts.BodySummary && !opts.BodyFull {
+	if !opts.NegotiationSummary && !opts.NegotiationFull &&
+		!opts.TransportSummary && !opts.TransportFull &&
+		!opts.HeadSummary && !opts.HeadFull &&
+		!opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
 	}
 
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	b.Trace("http-log", "version", "0.5")
 
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("server", "http-log 0.5")
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
