@@ -162,6 +162,7 @@ func main() {
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 
+		w.Header().Set("server", "http-log 0.5")
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
 		w.WriteHeader(opts.Status)
