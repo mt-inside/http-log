@@ -73,8 +73,8 @@ func (o TtyRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 
 	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(hi.SupportedVersions), o.s.NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(SignatureSchemes2Strings(hi.SignatureSchemes), o.s.NounStyle))
-	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Curves2Strings(hi.SupportedCurves), o.s.NounStyle))
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(hi.SignatureSchemes), o.s.NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(hi.SupportedCurves), o.s.NounStyle))
 	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(hi.CipherSuites), o.s.NounStyle))
 	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(hi.SupportedProtos, o.s.NounStyle))
 }

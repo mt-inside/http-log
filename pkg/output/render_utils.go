@@ -17,24 +17,11 @@ func ZipHostsPort(hosts []string, port string) (ret []string) {
 	}
 	return
 }
-func IPs2Strings(ips []net.IP) []string {
+
+func Slice2Strings[T fmt.Stringer](ins []T) []string {
 	var out []string
-	for _, ip := range ips {
-		out = append(out, ip.String())
-	}
-	return out
-}
-func SignatureSchemes2Strings(sss []tls.SignatureScheme) []string {
-	var out []string
-	for _, ss := range sss {
-		out = append(out, ss.String())
-	}
-	return out
-}
-func Curves2Strings(cs []tls.CurveID) []string {
-	var out []string
-	for _, c := range cs {
-		out = append(out, c.String())
+	for _, in := range ins {
+		out = append(out, in.String())
 	}
 	return out
 }
