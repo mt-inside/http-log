@@ -32,8 +32,8 @@ func (o LogRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 
 	log := o.log.WithName("Transport")
 	log.Info("supported", "versions", TLSVersions2Strings(hi.SupportedVersions))
-	log.Info("supported", "cert types", SignatureSchemes2Strings(hi.SignatureSchemes))
-	log.Info("supported", "cert curves", Curves2Strings(hi.SupportedCurves))
+	log.Info("supported", "cert types", Slice2Strings(hi.SignatureSchemes))
+	log.Info("supported", "cert curves", Slice2Strings(hi.SupportedCurves))
 	log.Info("supported", "symmetric cypher suites", CipherSuites2Strings(hi.CipherSuites))
 	log.Info("supported", "ALPN protocols", hi.SupportedProtos)
 }
