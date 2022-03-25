@@ -90,27 +90,27 @@ func (o TtyRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(hi.SupportedProtos, o.s.NounStyle))
 }
 
-func (o TtyRenderer) transportCommon(cs *tls.ConnectionState) {
-	fmt.Printf("%s sni %s agreed: %s alpn %s\n",
+func (o TtyRenderer) tlsCommon(cs *tls.ConnectionState) {
+	fmt.Printf("%s %s sni %s | alpn %s\n",
 		o.s.Info(getTimestamp()),
-		o.s.Addr(cs.ServerName),
 		o.s.Noun(TLSVersionName(cs.Version)),
+		o.s.Addr(cs.ServerName),
 		o.s.Noun(cs.NegotiatedProtocol),
 	)
 }
 
-// TransportSummary summarises the connection transport
-func (o TtyRenderer) TransportSummary(cs *tls.ConnectionState) {
-	o.transportCommon(cs)
+// TLSSummary summarises the connection transport
+func (o TtyRenderer) TLSSummary(cs *tls.ConnectionState) {
+	o.tlsCommon(cs)
 
 	if len(cs.PeerCertificates) > 0 {
 		fmt.Printf("%s x509 %s\n", o.s.Info(getTimestamp()), o.s.CertSummary(cs.PeerCertificates[0]))
 	}
 }
 
-// TransportFull prints full details on the connection transport
-func (o TtyRenderer) TransportFull(cs *tls.ConnectionState) {
-	o.transportCommon(cs)
+// TLSFull prints full details on the connection transport
+func (o TtyRenderer) TLSFull(cs *tls.ConnectionState) {
+	o.tlsCommon(cs)
 
 	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
 
@@ -125,10 +125,10 @@ func (o TtyRenderer) TransportFull(cs *tls.ConnectionState) {
 func (o TtyRenderer) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode int) {
 	// TODO render # and ? iff there are query and fragment bits
 	fmt.Printf(
-		"%s vhost %s: %s %s %s by %s => %s\n",
+		"%s %s vhost %s | %s %s by %s => %s\n",
 		o.s.Info(getTimestamp()),
-		o.s.Addr(vhost),
 		o.s.Noun(proto),
+		o.s.Addr(vhost),
 		o.s.Verb(method),
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
 		o.s.UrlPath(url),
@@ -140,7 +140,7 @@ func (o TtyRenderer) HeadSummary(proto, method, vhost, ua string, url *url.URL, 
 // HeadFull prints full contents of the application-layer request header
 func (o TtyRenderer) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf(
-		"%s vhost %s: %s %s %s\n",
+		"%s HTTP vhost %s | %s %s %s\n",
 		o.s.Info(getTimestamp()),
 		o.s.Addr(r.Host),
 		o.s.Noun(r.Proto),
@@ -224,7 +224,7 @@ func (o TtyRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject,
 
 func (o TtyRenderer) bodyCommon(contentType string, contentLength int64, bodyLen int) {
 	fmt.Printf(
-		"%s Body: alleged %d bytes of %s, actual length read %d\n",
+		"%s HTTP Body: alleged %d bytes of %s, actual length read %d\n",
 		o.s.Info(getTimestamp()),
 		o.s.Bright(contentLength),
 		o.s.Noun(contentType),

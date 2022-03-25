@@ -41,8 +41,8 @@ type renderer interface {
 	Connection(requestNo uint, c net.Conn)
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
-	TransportSummary(cs *tls.ConnectionState)
-	TransportFull(cs *tls.ConnectionState)
+	TLSSummary(cs *tls.ConnectionState)
+	TLSFull(cs *tls.ConnectionState)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
 	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
@@ -103,12 +103,14 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 var opts struct {
+	// TODO: take user-specified key and cert to serve (mutex with -K)
+	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
 	ListenAddr         string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	TLSAlgo            string `short:"k" long:"tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	TLSAlgo            string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
 	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
-	TransportSummary   bool   `short:"t" long:"transport" description:"Print important agreed transport (eg TLS) parameters"`
-	TransportFull      bool   `short:"T" long:"transport-full" description:"Print all agreed transport (eg TLS) parameters"`
+	TLSSummary         bool   `short:"t" long:"tls" description:"Print important agreed TLS parameters"`
+	TLSFull            bool   `short:"T" long:"tls-full" description:"Print all agreed TLS parameters"`
 	HeadSummary        bool   `short:"m" long:"head" description:"Print important header values"`
 	HeadFull           bool   `short:"M" long:"head-full" description:"Print entire request head"`
 	JWTValidatePath    string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
@@ -119,7 +121,7 @@ var opts struct {
 	Status             int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
-// TODO: cobra
+// TODO: cobra + viper(? - go-flags is really nice)
 func main() {
 
 	_, err := flags.Parse(&opts)
@@ -157,7 +159,7 @@ func main() {
 	}
 
 	if !opts.NegotiationSummary && !opts.NegotiationFull &&
-		!opts.TransportSummary && !opts.TransportFull &&
+		!opts.TLSSummary && !opts.TLSFull &&
 		!opts.HeadSummary && !opts.HeadFull &&
 		!opts.BodySummary && !opts.BodyFull {
 		opts.HeadSummary = true
@@ -243,11 +245,11 @@ func main() {
 			VerifyConnection: func(cs tls.ConnectionState) error {
 				b.Trace("TLS: all cert verification finished")
 
-				if opts.TransportFull {
-					op.TransportFull(&cs)
-				} else if opts.TransportSummary {
+				if opts.TLSFull {
+					op.TLSFull(&cs)
+				} else if opts.TLSSummary {
 					// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-					op.TransportSummary(&cs)
+					op.TLSSummary(&cs)
 				}
 
 				return nil // can inspect all connection and TLS info and reject
