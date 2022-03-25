@@ -148,7 +148,8 @@ func main() {
 		b = output.NewTtyBios(s)
 		op = output.NewTtyRenderer(s)
 	case "json":
-		l := usvc.GetLogger(false, 10)
+		// TODO: verbosity option
+		l := usvc.GetLogger(false, 0)
 		b = output.NewLogBios(l)
 		op = output.NewLogRenderer(l)
 	default:
