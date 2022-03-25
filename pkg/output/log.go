@@ -2,6 +2,7 @@ package output
 
 import (
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
