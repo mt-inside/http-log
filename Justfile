@@ -20,7 +20,7 @@ build-lambda: lint
 	zip http-log-lambda.zip http-log-lambda
 
 run-daemon *ARGS: lint
-	go run ./cmd/http-log -t -m -b -k=ecdsa {{ARGS}}
+	go run ./cmd/http-log -t -m -b -K=ecdsa {{ARGS}}
 
 run-daemon-docker: package-docker
 	docker run -p8080:8080 {{REPO}}:{{TAG}}
