@@ -164,6 +164,7 @@ func main() {
 	b.Trace("http-log", "version", "0.5")
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
+		// TODO (where? mux?) print the proxy route to get here - all x-forwarded-for, via, etc headers. test in istio. does go transparently handle proxy protocol?
 		w.Header().Set("server", "http-log 0.5")
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
