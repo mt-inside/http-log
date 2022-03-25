@@ -3,6 +3,7 @@ package output
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -56,6 +57,16 @@ type TtyRenderer struct {
 // NewTtyRenderer returns a new outputter than pretty-prints to a tty device
 func NewTtyRenderer(s TtyStyler) TtyRenderer {
 	return TtyRenderer{s}
+}
+
+// Connection announces the accepted connection
+func (o TtyRenderer) Connection(requestNo uint, c net.Conn) {
+	fmt.Printf(
+		"%s TCP connection %d from %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.Bright(requestNo),
+		o.s.Addr(c.RemoteAddr().String()),
+	)
 }
 
 // TLSNegSummary summarises the TLS negotiation

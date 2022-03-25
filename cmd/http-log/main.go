@@ -38,6 +38,7 @@ func init() {
 }
 
 type renderer interface {
+	Connection(requestNo uint, c net.Conn)
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
 	TransportSummary(cs *tls.ConnectionState)
@@ -207,7 +208,7 @@ func main() {
 			// Note: ctx has a bunch of info under context-key "http-server"
 
 			requestNo++ // Think everything is single-threaded...
-			b.Trace("L4 connection accepted", "RequestCount", requestNo, "from", c.RemoteAddr())
+			op.Connection(requestNo, c)
 
 			return ctx
 		},

@@ -21,6 +21,12 @@ func NewLogRenderer(log logr.Logger) LogRenderer {
 	return LogRenderer{log}
 }
 
+// Connection announces the accepted connection
+func (o LogRenderer) Connection(requestNo uint, c net.Conn) {
+	log := o.log.WithName("Transport")
+	log.Info("connection", "count", requestNo, "remote", c.RemoteAddr())
+}
+
 // TLSNegSummary summarises the TLS negotiation
 func (o LogRenderer) TLSNegSummary(hi *tls.ClientHelloInfo) {
 	log := o.log.WithName("Transport")
