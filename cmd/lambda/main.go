@@ -72,8 +72,8 @@ func logRaw(
 	ctx *lambdacontext.LambdaContext,
 	input map[string]interface{},
 ) {
-	log := usvc.GetLogger(false)
-	op := output.NewTty(log, false) // TODO: log op, fix it up first
+	log := usvc.GetLogger(false, 0) // TODO: verbostiy option
+	op := output.NewLogRenderer(log)
 
 	reqTarget := &url.URL{
 		Host: ctx.InvokedFunctionArn,
@@ -101,8 +101,8 @@ func logAPIGw(
 	lc *lambdacontext.LambdaContext,
 	input codec.AwsAPIGwRequest,
 ) {
-	log := usvc.GetLogger(false)
-	op := output.NewTty(log, false)
+	log := usvc.GetLogger(false, 0) // TODO: verbostiy option
+	op := output.NewLogRenderer(log)
 
 	/* wot u see: TODO make MD table
 	* direct - context looks ok, input empty map

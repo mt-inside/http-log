@@ -4,10 +4,14 @@ default:
 REPO := "mtinside/http-log"
 TAG := "0.6"
 
+install-linters:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+
 lint:
 	go fmt ./...
 	go vet ./...
-	golint ./...
+	#staticcheck ./... - waiting for go1.18 support
 	golangci-lint run ./...
 	go test ./...
 
@@ -15,7 +19,7 @@ build-lambda: lint
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
 
-run-daemon *ARGS: #lint
+run-daemon *ARGS: lint
 	go run ./cmd/http-log -t -m -b -k=ecdsa {{ARGS}}
 
 run-daemon-docker: package-docker

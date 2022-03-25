@@ -28,7 +28,7 @@ func TestUrlPath(t *testing.T) {
 	}
 
 	// Give this a no-color aurora that won't add any escape codes; we're just testing string construction, not colorization
-	s := NewStyler(aurora.NewAurora(false))
+	s := NewTtyStyler(aurora.NewAurora(false))
 
 	for _, test := range tests {
 		url, _ := url.Parse(test.ip)
