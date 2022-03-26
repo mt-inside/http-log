@@ -105,6 +105,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var opts struct {
 	// TODO: take user-specified key and cert to serve (mutex with -K)
 	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
+	// TODO: take timeout for all network ops
 	ListenAddr         string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 	TLSAlgo            string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
