@@ -41,6 +41,24 @@ func TryExtractJWT(b output.Bios, r *http.Request, validateKeyPath string) (toke
 	return
 }
 
+func HeaderFromRequest(r *http.Request, key string) (value string) {
+	value = ""
+
+	hs := r.Header[http.CanonicalHeaderKey(key)]
+	if len(hs) >= 1 { // len(nil) == 0
+		value = hs[0]
+	}
+
+	return
+}
+func HeaderFromMap(headers map[string]interface{}, key string) (value string) {
+	value = ""
+	if h, ok := headers[http.CanonicalHeaderKey(key)]; ok { // TODO we canonicalise the header key, but I don't think they're canonicalised in this map
+		value = h.(string)
+	}
+	return
+}
+
 func JWT(token *jwt.Token) (start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
 	claims := token.Claims.(*jwt.RegisteredClaims)
 

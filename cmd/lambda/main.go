@@ -128,14 +128,14 @@ func logAPIGw(
 	/* There's also mutliValueHeaders, but their "last" values are all present in headers */
 
 	/* Call from API-GW by a real client (not a web console test invocation) */
-	userAgent := getHeader(headers, "User-Agent")
-	host := getHeader(headers, "Host") // There's also requestContext[domainName] but I assume it's only set for custom domains
+	userAgent := codec.HeaderFromMap(headers, "User-Agent")
+	host := codec.HeaderFromMap(headers, "Host") // There's also requestContext[domainName] but I assume it's only set for custom domains
 
 	var contentType string
 	var body []byte
 	/* Call with a body */
 	if input["body"] != nil {
-		contentType = getHeader(headers, "content-type")
+		contentType = codec.HeaderFromMap(headers, "content-type")
 		body = []byte(input["body"].(string)) // It is a string type in the map; take the bytestream of that
 	}
 
@@ -173,11 +173,6 @@ func logAPIGw(
 		int64(len(body)),
 		body,
 	)
-}
 
-func getHeader(headers map[string]interface{}, key string) string {
-	if val, ok := headers[key]; ok {
-		return val.(string) // TODO case insenstive match, cause it looks client-dependant
-	}
-	return "<not set>"
+	return codec.AwsAPIGwWrap(respCode, codec.GetBody()), nil
 }

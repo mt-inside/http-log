@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -64,7 +63,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Headers */
 
-	userAgent, _ := getHeader(r, "User-Agent")
+	userAgent := codec.HeaderFromRequest(r, "User-Agent")
 	jwt, jwtErr, jwtFound := codec.TryExtractJWT(lm.b, r, opts.JWTValidatePath)
 
 	if opts.HeadFull {
@@ -84,7 +83,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Body */
 
-	contentType, _ := getHeader(r, "Content-Type")
+	contentType := codec.HeaderFromRequest(r, "Content-Type")
 	// Print only if the method would traditionally have a body, or one has been sent
 	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
 		bs, err := io.ReadAll(r.Body)
@@ -262,17 +261,4 @@ func main() {
 		b.CheckErr(srv.ListenAndServe())
 		b.Trace("Shutting down")
 	}
-}
-
-func getHeader(r *http.Request, h string) (ret string, ok bool) {
-	hs := r.Header[h]
-	if len(hs) >= 1 {
-		ret = hs[0]
-		ok = true
-	} else {
-		ret = fmt.Sprintf("<no %s>", h)
-		ok = false
-	}
-
-	return
 }
