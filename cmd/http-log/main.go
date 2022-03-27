@@ -104,7 +104,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var opts struct {
 	// TODO: take user-specified key and cert to serve (mutex with -K)
 	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
-	// TODO: take timeout for all network ops
+	// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
 	ListenAddr         string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 	TLSAlgo            string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
@@ -193,16 +193,18 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         opts.ListenAddr,
-		ReadTimeout:  120 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  120 * time.Second,
-		Handler:      loggingMux,
+		Addr:              opts.ListenAddr,
+		ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
+		ReadTimeout:       120 * time.Second, // Time for reading request headers + body
+		WriteTimeout:      120 * time.Second, // Time for writing response (headers + body?)
+		IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
+		Handler:           loggingMux,
 		BaseContext: func(l net.Listener) context.Context {
 			switch l.(type) {
 			case *net.TCPListener:
+				//TODO: always wanna know this - make it a method on OP.
 				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
-			default: // *tls.listener assumed
+			default: // *tls.listener assumed - it's unexported so can't test for it :(
 				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TLSAlgo)
 			}
 			return context.Background()
