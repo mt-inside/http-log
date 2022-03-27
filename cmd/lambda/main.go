@@ -2,9 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
+	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -14,66 +19,84 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
-const (
-	respCode   = 200
-	expectType = envelopeTypeAPIGw // TODO take from "config"
-)
+type renderer interface {
+	Connection(requestNo uint, c net.Conn)
+	TLSNegSummary(cs *tls.ClientHelloInfo)
+	TLSNegFull(cs *tls.ClientHelloInfo)
+	TLSSummary(cs *tls.ConnectionState)
+	TLSFull(cs *tls.ConnectionState)
+	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
+	HeadFull(r *http.Request, respCode int)
+	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
+	JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
+	BodySummary(contentType string, contentLength int64, body []byte)
+	BodyFull(contentType string, contentLength int64, body []byte)
+}
 
-type envelopeType int
-
 const (
-	envelopeTypeRaw   envelopeType = iota
-	envelopeTypeAPIGw envelopeType = iota
-	envelopeTypeALB   envelopeType = iota
+	respCode = 200 // TODO config
 )
 
 func main() {
 	lambda.Start(handleRequest)
+
 }
 
 func handleRequest(
 	ctx context.Context,
 	input map[string]interface{},
 ) (
-	interface{},
-	error, // TODO what happens if we set this?
+	body interface{},
+	err error, // TODO what happens if we set this?
 ) {
 	//return handleDump(ctx, input)
+	// TODO on the Renderers
+	fmt.Printf("%s %s running under %s in %s\n", os.Getenv("AWS_LAMBDA_FUNCTION_NAME"), os.Getenv("AWS_LAMBDA_FUNCTION_VERSION"), os.Getenv("AWS_EXECUTION_ENV"), os.Getenv("AWS_REGION"))
 
 	lc, _ := lambdacontext.FromContext(ctx)
 
+	log := usvc.GetLogger(false, 0) // TODO: verbostiy option
+	op := output.NewLogRenderer(log)
+
+	// TODO: finally build that unified config system using viper, cobra, etc. Put it in usvc, have the function take a goflags opts struct? And return a viper?
 	// TODO: auto-detect based on type reflection, headers present etc
-	switch expectType {
-	case envelopeTypeRaw:
-		logRaw(lc, input)
-		return codec.GetBody(), nil
-	case envelopeTypeAPIGw:
-		logAPIGw(lc, input)
-		return codec.AwsAPIGwWrap(respCode, codec.GetBody()), nil
-	case envelopeTypeALB:
+	envelope := os.Getenv("HTTP_LOG_ENVELOPE")
+	switch envelope {
+	case "dump":
+		return dump(ctx, input)
+	case "none":
+		return logRaw(op, lc, input)
+	case "apigw":
+		return logAPIGw(op, lc, input)
+	case "alb":
 		panic(errors.New("TODO"))
 	default:
-		panic(errors.New("bottom"))
+		panic(errors.New("Unrecognised envelope type"))
 	}
-
 }
 
 // Dump mode. Can only be called by invoke api, as it doesn't reply with the envelope for eg api-gw
-//nolint:deadcode,unused
-func handleDump(
+func dump(
 	ctx context.Context,
 	input map[string]interface{},
+) (
+	body interface{},
+	err error,
 ) {
 	spew.Dump(ctx)
 	spew.Dump(input)
+
+	return codec.GetBody(), nil
 }
 
 func logRaw(
+	op renderer,
 	ctx *lambdacontext.LambdaContext,
 	input map[string]interface{},
+) (
+	interface{},
+	error,
 ) {
-	log := usvc.GetLogger(false, 0) // TODO: verbostiy option
-	op := output.NewLogRenderer(log)
 
 	reqTarget := &url.URL{
 		Host: ctx.InvokedFunctionArn,
@@ -95,15 +118,18 @@ func logRaw(
 		int64(len(body)),
 		[]byte(body),
 	)
+
+	return codec.GetBody(), nil
 }
 
 func logAPIGw(
+	op renderer,
 	lc *lambdacontext.LambdaContext,
 	input codec.AwsAPIGwRequest,
+) (
+	interface{},
+	error,
 ) {
-	log := usvc.GetLogger(false, 0) // TODO: verbostiy option
-	op := output.NewLogRenderer(log)
-
 	/* wot u see: TODO make MD table
 	* direct - context looks ok, input empty map
 	* api-gw test - input[headers] is nil (not non-existant, not empty map)
