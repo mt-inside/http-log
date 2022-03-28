@@ -2,9 +2,11 @@ package codec
 
 import (
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -12,17 +14,21 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang-jwt/jwt/v4/request"
-	"github.com/mt-inside/http-log/pkg/output"
 )
 
-func TryExtractJWT(b output.Bios, r *http.Request, validateKeyPath string) (token *jwt.Token, tokenErr error, found bool) {
+func TryExtractJWT(r *http.Request, validateKeyPath string) (token *jwt.Token, tokenErr error, found bool) {
 	var keyFunc func(token *jwt.Token) (interface{}, error) = nil
 	if validateKeyPath != "" {
+		// TODO: whoever calls this should read the file in their main function and should call parsePublicKey over it too, passing it in here
 		bytes, err := ioutil.ReadFile(validateKeyPath)
-		b.CheckErr(err)
+		if err != nil {
+			return nil, err, false
+		}
 
 		publicKey, err := ParsePublicKey(bytes)
-		b.CheckErr(err)
+		if err != nil {
+			return nil, err, false
+		}
 
 		keyFunc = func(token *jwt.Token) (interface{}, error) { return publicKey, err }
 	}
@@ -35,8 +41,13 @@ func TryExtractJWT(b output.Bios, r *http.Request, validateKeyPath string) (toke
 		request.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
 	)
 
+	// TODO: remove this eventually
+	if tokenErr != nil {
+		fmt.Println("DEBUG maybe allowlist this error?", tokenErr)
+	}
+
 	// Ergonomics of the jwt library are bad
-	found = tokenErr == nil || !strings.Contains(tokenErr.Error(), "no token present in request")
+	found = tokenErr == nil || strings.Contains(tokenErr.Error(), "TODO: allowlist benign errors")
 
 	return
 }
@@ -109,7 +120,6 @@ func JWT(token *jwt.Token) (start, end *time.Time, ID, subject, issuer string, a
 }
 
 func ParsePublicKey(key []byte) (crypto.PublicKey, error) {
-
 	var err error
 
 	var block *pem.Block
@@ -127,4 +137,27 @@ func ParsePublicKey(key []byte) (crypto.PublicKey, error) {
 	}
 
 	return parsedKey, nil
+}
+
+func ParseCertificate(cert []byte) (*x509.Certificate, error) {
+	var err error
+
+	var block *pem.Block
+	if block, _ = pem.Decode(cert); block == nil {
+		return nil, errors.New("File does not contain PEM-encoded data")
+	}
+
+	if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+		return cert, nil
+	}
+	return nil, err
+}
+func FromCertificate(cert *tls.Certificate) *x509.Certificate {
+	c, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		// Assume that if we have the bytes in a tls.Certificate struct that they parse, might not be true
+		// NB: can't use output.Bios in this package; it doesn't output
+		panic(fmt.Errorf("cert doesn't parse: %w", err))
+	}
+	return c
 }

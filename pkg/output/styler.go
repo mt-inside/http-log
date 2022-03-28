@@ -189,38 +189,13 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 }
 
 // TODO should return string really
-func (s TtyStyler) ClientCertChain(certs []*x509.Certificate) {
-	for i, cert := range certs {
-		fmt.Printf("\t%d: %s\n", i, s.CertSummary(cert))
-	}
-	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
-
-	// TODO: a lot of the stuff from serving, eg validation
-	// - infact I think the only difference is that we don't print SANs in this one
-}
-
-// TODO should return string really
-func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts []*x509.Certificate, verifiedCerts []*x509.Certificate) {
-	var addr string
-	if name != nil {
-		addr = *name
-	} else if ip != nil {
-		addr = "[" + ip.String() + "]"
-	} else {
-		panic(errors.New("Need either a name or IP to check serving cert against"))
-	}
+func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headCb func(head *x509.Certificate)) {
 
 	head := peerCerts[0]
-
 	fmt.Printf("\t0 (presented): %s\n", s.CertSummary(head))
-	fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
-	fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
-	fmt.Printf(
-		"\t\tSNI %s in SANs? %s (CN? %s)\n",
-		s.au.Colorize(*name, s.AddrStyle),
-		s.YesError(head.VerifyHostname(addr)),
-		s.YesInfo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
-	)
+	if headCb != nil {
+		headCb(head)
+	}
 
 	certs := verifiedCerts
 	if certs == nil {
@@ -240,4 +215,97 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts []*x509.
 	}
 
 	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
+}
+
+// TODO just take an addr string, try parse as IP, if so use "[ip.String()]"
+// ServingCertChain prints the entire cert chain, rendering information relevant to server certs.
+// This function does not attempt to veryify the certs, and should only be used for eg printing certs that we present, not that we receive
+func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifiedCerts []*x509.Certificate) {
+	var addr string
+	if name != nil {
+		addr = *name
+	} else if ip != nil {
+		addr = "[" + ip.String() + "]"
+	} else {
+		panic(errors.New("Need either a name or IP to check serving cert against"))
+	}
+
+	s.certChain(
+		peerCerts, verifiedCerts,
+		func(head *x509.Certificate) {
+			fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+			fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
+			fmt.Printf(
+				"\t\tSNI %s in SANs? %s (CN? %s)\n",
+				s.au.Colorize(*name, s.AddrStyle),
+				s.YesError(head.VerifyHostname(addr)),
+				s.YesInfo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
+			)
+		},
+	)
+}
+
+func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certificate, caCert *x509.Certificate) {
+	opts := x509.VerifyOptions{
+		DNSName:       name,
+		Intermediates: x509.NewCertPool(),
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	if caCert != nil {
+		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify
+		opts.Roots = x509.NewCertPool()
+		opts.Roots.AddCert(caCert)
+	}
+	for _, cert := range peerCerts[1:] {
+		opts.Intermediates.AddCert(cert)
+	}
+
+	chains, err := peerCerts[0].Verify(opts)
+	if err != nil {
+		s.ServingCertChain(&name, nil, peerCerts, nil)
+		fmt.Println()
+	} else {
+		for _, chain := range chains {
+			s.ServingCertChain(&name, nil, peerCerts, chain)
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("\tCert valid?", s.YesError(err))
+}
+
+// TODO should return string really
+// ClientCertChain prints the entire cert chain, rendering information relevant to client certs.
+// This function does not attempt to veryify the certs, and should only be used for eg printing certs that we present, not that we receive
+func (s TtyStyler) ClientCertChain(peerCerts, verifiedCerts []*x509.Certificate) {
+	s.certChain(peerCerts, verifiedCerts, nil)
+}
+
+func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert *x509.Certificate) {
+	opts := x509.VerifyOptions{
+		Intermediates: x509.NewCertPool(),
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	if caCert != nil {
+		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify
+		// Most likely these will fail to verify a client cert, but 🤷‍♀️ the host setup
+		opts.Roots = x509.NewCertPool()
+		opts.Roots.AddCert(caCert)
+	}
+	for _, cert := range peerCerts[1:] {
+		opts.Intermediates.AddCert(cert)
+	}
+
+	chains, err := peerCerts[0].Verify(opts)
+	if err != nil {
+		s.ClientCertChain(peerCerts, nil)
+		fmt.Println()
+	} else {
+		for _, chain := range chains {
+			s.ClientCertChain(peerCerts, chain)
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("\tCert valid?", s.YesError(err))
 }

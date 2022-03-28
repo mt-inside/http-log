@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -19,12 +20,13 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 )
 
+// TODO: this is SO different, I'm not lambda can share it. Make its own (iface + pair of impls). Can still use bios and styler (for printing+logging certs etc)
 type renderer interface {
 	Connection(requestNo uint, c net.Conn)
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
-	TLSSummary(cs *tls.ConnectionState)
-	TLSFull(cs *tls.ConnectionState)
+	TLSSummary(cs *tls.ConnectionState, clientCa *x509.Certificate)
+	TLSFull(cs *tls.ConnectionState, clientCa *x509.Certificate)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
 	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)

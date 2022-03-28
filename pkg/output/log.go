@@ -2,6 +2,7 @@ package output
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,6 +20,17 @@ type LogRenderer struct {
 // NewLogRenderer returns a new outputter than logs using zapr
 func NewLogRenderer(log logr.Logger) LogRenderer {
 	return LogRenderer{log}
+}
+
+func (o LogRenderer) Listen(addr net.Addr) {
+	log := o.log.WithName("TCP")
+	log.Info("Listening", "addr", addr)
+}
+
+func (o LogRenderer) ServingCert(pair *tls.Certificate) {
+	log := o.log.WithName("TLS")
+	// TODO: need that logStyler
+	log.Info("Serving Cert", "yes", true)
 }
 
 // Connection announces the accepted connection
@@ -46,7 +58,7 @@ func (o LogRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 }
 
 // TLSSummary summarises the connection transport
-func (o LogRenderer) TLSSummary(cs *tls.ConnectionState) {
+func (o LogRenderer) TLSSummary(cs *tls.ConnectionState, clientCa *x509.Certificate) {
 	log := o.log.WithName("TLS")
 	log.Info(
 		"Agreed",
@@ -54,14 +66,18 @@ func (o LogRenderer) TLSSummary(cs *tls.ConnectionState) {
 		"version", TLSVersionName(cs.Version),
 		"alpn", cs.NegotiatedProtocol,
 	)
+
+	// TODO log one-line clientcert summary (is now when we need a logStyler?)
 }
 
 // TLSFull prints full details on the connection transport
-func (o LogRenderer) TLSFull(cs *tls.ConnectionState) {
-	o.TLSSummary(cs)
+func (o LogRenderer) TLSFull(cs *tls.ConnectionState, clientCa *x509.Certificate) {
+	o.TLSSummary(cs, clientCa)
 
 	log := o.log.WithName("TLS")
 	log.Info("Agreed", "symmetric cipher suite", cs.CipherSuite)
+
+	// TODO log full client cert chain
 }
 
 // HeadSummary summarises the application-layer request header
