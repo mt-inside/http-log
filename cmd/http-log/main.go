@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,11 +39,13 @@ func init() {
 }
 
 type renderer interface {
+	Listen(addr net.Addr)
+	ServingCert(cert *tls.Certificate)
 	Connection(requestNo uint, c net.Conn)
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
-	TLSSummary(cs *tls.ConnectionState)
-	TLSFull(cs *tls.ConnectionState)
+	TLSSummary(cs *tls.ConnectionState, clientCA *x509.Certificate)
+	TLSFull(cs *tls.ConnectionState, clientCA *x509.Certificate)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
 	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
@@ -53,10 +57,12 @@ type renderer interface {
 var requestNo uint
 
 type logMiddle struct {
-	b      output.Bios
-	next   http.Handler
-	output renderer
-	caPair *tls.Certificate
+	b        output.Bios
+	next     http.Handler
+	output   renderer
+	selfSign bool
+	certPair *tls.Certificate // TODO why u a pointer?
+	clientCA *x509.Certificate
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +70,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Headers */
 
 	userAgent := codec.HeaderFromRequest(r, "User-Agent")
-	jwt, jwtErr, jwtFound := codec.TryExtractJWT(lm.b, r, opts.JWTValidatePath)
+	jwt, jwtErr, jwtFound := codec.TryExtractJWT(r, opts.JWTValidatePath)
 
 	if opts.HeadFull {
 		lm.output.HeadFull(r, opts.Status)
@@ -105,20 +111,29 @@ var opts struct {
 	// TODO: take user-specified key and cert to serve (mutex with -K)
 	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
 	// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
-	ListenAddr         string `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	TLSAlgo            string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	/* General options */
+	ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+	Status     int           `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
+	Response   string        `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
+	Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
+
+	/* TLS and validation */
+	Cert            string `short:"c" long:"cert" optional:"yes" description:"Path to TLS server certificate. Setting this implies serving https"`
+	Key             string `short:"k" long:"key" optional:"yes" description:"Path to TLS server key. Setting this implies serving https"`
+	TLSAlgo         string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+	ClientCA        string `short:"C" long:"ca" optional:"yes" description:"Path to TLS client CA certificate"`
+	JWTValidatePath string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
+
+	/* Logging settings */
+	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
 	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
 	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
 	TLSSummary         bool   `short:"t" long:"tls" description:"Print important agreed TLS parameters"`
 	TLSFull            bool   `short:"T" long:"tls-full" description:"Print all agreed TLS parameters"`
 	HeadSummary        bool   `short:"m" long:"head" description:"Print important header values"`
 	HeadFull           bool   `short:"M" long:"head-full" description:"Print entire request head"`
-	JWTValidatePath    string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
 	BodySummary        bool   `short:"b" long:"body" description:"Print truncated body"`
 	BodyFull           bool   `short:"B" long:"body-full" description:"Print full body"`
-	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
-	Response           string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
-	Status             int    `short:"s" long:"status" description:"Http status code to return" default:"200"`
 }
 
 // TODO: cobra + viper(? - go-flags is really nice)
@@ -185,11 +200,50 @@ func main() {
 		output: op,
 	}
 
-	if opts.TLSAlgo != "off" {
-		loggingMux.caPair, err = utils.GenSelfSignedCa(b, opts.TLSAlgo)
-		if err != nil {
-			panic(err)
+	https := false
+	if opts.Cert != "" || opts.Key != "" || opts.TLSAlgo != "off" {
+		https = true
+
+		if opts.Cert != "" || opts.Key != "" {
+			if opts.TLSAlgo != "off" {
+				b.PrintErr("Can't supply TLS key+cert and also ask for self-signed")
+			}
+
+			if opts.Cert == "" || opts.Key == "" {
+				b.PrintErr("Must supply both TLS server key and certificate")
+			}
+
+			loggingMux.selfSign = false
+			servingPair, err := tls.LoadX509KeyPair(opts.Cert, opts.Key)
+			b.CheckErr(err)
+			loggingMux.certPair = &servingPair
 		}
+
+		if opts.TLSAlgo != "off" {
+			loggingMux.certPair, err = utils.GenSelfSignedCa(b, opts.TLSAlgo)
+			b.CheckErr(err)
+		}
+
+		op.ServingCert(loggingMux.certPair)
+	}
+
+	if opts.ClientCA != "" {
+		if !https {
+			b.PrintErr("Can't verify TLS client certs without serving TLS")
+		}
+
+		bytes, err := ioutil.ReadFile(opts.ClientCA)
+		b.CheckErr(err)
+		loggingMux.clientCA, err = codec.ParseCertificate(bytes)
+		b.CheckErr(err)
+
+		// TODO: op method (where you'll have s)
+		fmt.Println("Verifiying client certs with TODO")
+	}
+
+	if opts.JWTValidatePath != "" {
+		// TODO: usual story: jwt validation key should be loaded and parsed here, stored as an x509.Certificate, and its summary printed at startup
+		fmt.Println("Verifiying JWTs with TODO")
 	}
 
 	srv := &http.Server{
@@ -200,12 +254,12 @@ func main() {
 		IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
 		Handler:           loggingMux,
 		BaseContext: func(l net.Listener) context.Context {
-			switch l.(type) {
-			case *net.TCPListener:
-				//TODO: always wanna know this - make it a method on OP.
-				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "plaintext")
-			default: // *tls.listener assumed - it's unexported so can't test for it :(
-				b.Trace("HTTP server listening", "Addr", l.Addr(), "transport", "tls", "algo", opts.TLSAlgo)
+			if https {
+				// l is a *tls.listener but it's unexported so can't cast to it
+				op.Listen(l.Addr())
+			} else {
+				lis := l.(*net.TCPListener)
+				op.Listen(lis.Addr())
 			}
 			return context.Background()
 		},
@@ -222,7 +276,7 @@ func main() {
 		},
 	}
 
-	if opts.TLSAlgo != "off" {
+	if https {
 		srv.TLSConfig = &tls.Config{
 			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
@@ -238,7 +292,10 @@ func main() {
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				return utils.GenServingCert(b, hi, loggingMux.caPair, opts.TLSAlgo)
+				if loggingMux.selfSign {
+					return utils.GenServingCert(b, hi, loggingMux.certPair, opts.TLSAlgo)
+				}
+				return loggingMux.certPair, nil
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				b.Trace("TLS built-in cert verification finished")
@@ -248,10 +305,10 @@ func main() {
 				b.Trace("TLS: all cert verification finished")
 
 				if opts.TLSFull {
-					op.TLSFull(&cs)
+					op.TLSFull(&cs, loggingMux.clientCA)
 				} else if opts.TLSSummary {
 					// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-					op.TLSSummary(&cs)
+					op.TLSSummary(&cs, loggingMux.clientCA)
 				}
 
 				return nil // can inspect all connection and TLS info and reject

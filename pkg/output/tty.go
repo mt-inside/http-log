@@ -2,12 +2,15 @@ package output
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mt-inside/http-log/pkg/codec"
 )
 
 /* TODO
@@ -59,6 +62,26 @@ func NewTtyRenderer(s TtyStyler) TtyRenderer {
 	return TtyRenderer{s}
 }
 
+func (o TtyRenderer) Listen(addr net.Addr) {
+	fmt.Printf(
+		"%s TCP listening on %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.Addr(addr.String()),
+	)
+}
+func (o TtyRenderer) ServingCert(pair *tls.Certificate) {
+	// TODO: need that parseAndRender function (in utils cause it doesn't output). Use
+	// Actually just Parse (have LoadCert/PublicKey) call it. We should render here (ie pass to cert summary)
+	// - X here
+	// - where print-cert prints its presented client cert
+	// - where genCA/servingCert prints what its made / got from the cache
+	fmt.Printf(
+		"%s TLS serving cert: %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.CertSummary(codec.FromCertificate(pair)),
+	)
+}
+
 // Connection announces the accepted connection
 func (o TtyRenderer) Connection(requestNo uint, c net.Conn) {
 	fmt.Printf(
@@ -100,24 +123,24 @@ func (o TtyRenderer) tlsCommon(cs *tls.ConnectionState) {
 }
 
 // TLSSummary summarises the connection transport
-func (o TtyRenderer) TLSSummary(cs *tls.ConnectionState) {
+func (o TtyRenderer) TLSSummary(cs *tls.ConnectionState, clientCa *x509.Certificate) {
 	o.tlsCommon(cs)
 
 	if len(cs.PeerCertificates) > 0 {
-		fmt.Printf("%s x509 %s\n", o.s.Info(getTimestamp()), o.s.CertSummary(cs.PeerCertificates[0]))
+		//TODO: CertSummaryVerified() (pass in ca, verify, just print valid? YesError() on the the end of the line)
+		fmt.Printf("%s client cert %s\n", o.s.Info(getTimestamp()), o.s.CertSummary(cs.PeerCertificates[0]))
 	}
 }
 
 // TLSFull prints full details on the connection transport
-func (o TtyRenderer) TLSFull(cs *tls.ConnectionState) {
+func (o TtyRenderer) TLSFull(cs *tls.ConnectionState, clientCa *x509.Certificate) {
 	o.tlsCommon(cs)
 
 	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
 
 	if len(cs.PeerCertificates) > 0 {
-		fmt.Printf("%s x509\n", o.s.Info(getTimestamp()))
-		// TODO print cert chain using lb-checker routine - factor that out to ValidateAndPrint(presentedChain, userGivenRoot/nil)
-		o.s.ClientCertChain(cs.PeerCertificates)
+		fmt.Printf("%s client cert chains\n", o.s.Info(getTimestamp()))
+		o.s.ClientCertChainVerified(cs.PeerCertificates, clientCa)
 	}
 }
 

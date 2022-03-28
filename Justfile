@@ -22,6 +22,10 @@ build-lambda: lint
 run-daemon *ARGS: lint
 	go run ./cmd/http-log -t -m -b -K=ecdsa {{ARGS}}
 
+run-daemon-full *ARGS: lint
+	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
+	go run ./cmd/http-log -T -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/42-jwt-pki/public.pem {{ARGS}}
+
 run-daemon-docker: package-docker
 	docker run -p8080:8080 {{REPO}}:{{TAG}}
 
