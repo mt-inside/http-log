@@ -227,7 +227,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifie
 	} else if ip != nil {
 		addr = "[" + ip.String() + "]"
 	} else {
-		panic(errors.New("Need either a name or IP to check serving cert against"))
+		panic(errors.New("need either a name or IP to check serving cert against"))
 	}
 
 	s.certChain(
@@ -239,7 +239,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifie
 				"\t\tSNI %s in SANs? %s (CN? %s)\n",
 				s.au.Colorize(*name, s.AddrStyle),
 				s.YesError(head.VerifyHostname(addr)),
-				s.YesInfo(strings.ToLower(head.Subject.CommonName) == strings.ToLower(*name)),
+				s.YesInfo(strings.EqualFold(head.Subject.CommonName, *name)),
 			)
 		},
 	)
