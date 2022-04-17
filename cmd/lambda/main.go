@@ -73,7 +73,7 @@ func handleRequest(
 	case "alb":
 		panic(errors.New("TODO"))
 	default:
-		panic(errors.New("Unrecognised envelope type"))
+		panic(errors.New("unrecognised envelope type"))
 	}
 }
 

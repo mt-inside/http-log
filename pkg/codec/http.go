@@ -124,7 +124,7 @@ func ParsePublicKey(key []byte) (crypto.PublicKey, error) {
 
 	var block *pem.Block
 	if block, _ = pem.Decode(key); block == nil {
-		return nil, errors.New("File does not contain PEM-encoded data")
+		return nil, errors.New("file does not contain PEM-encoded data")
 	}
 
 	var parsedKey interface{}
@@ -144,7 +144,7 @@ func ParseCertificate(cert []byte) (*x509.Certificate, error) {
 
 	var block *pem.Block
 	if block, _ = pem.Decode(cert); block == nil {
-		return nil, errors.New("File does not contain PEM-encoded data")
+		return nil, errors.New("file does not contain PEM-encoded data")
 	}
 
 	if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
