@@ -6,7 +6,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 )
@@ -40,9 +39,9 @@ func CipherSuites2Strings(cs []uint16) []string {
 	return out
 }
 
-func PublicKeyInfo(pk crypto.PublicKey) string {
+func PublicKeyInfo(key crypto.PublicKey) string {
 	// Note on the comments: although this is renderPUBLICkey, we wanna print the private key size cause that's what matters, so try to derive it from what we've got
-	switch pubKey := pk.(type) {
+	switch pubKey := key.(type) {
 	case *rsa.PublicKey:
 		return fmt.Sprintf("RSA:%d", pubKey.Size()*8) // private and public are same; it's the length of the shared modulus
 	case *ecdsa.PublicKey:
@@ -50,7 +49,7 @@ func PublicKeyInfo(pk crypto.PublicKey) string {
 	case ed25519.PublicKey:
 		return fmt.Sprintf("Ed25519(%d)", ed25519.PrivateKeySize*8) // Constant size
 	default:
-		panic(errors.New("bottom"))
+		return "<unknown public key type>"
 	}
 }
 

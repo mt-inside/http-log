@@ -1,6 +1,7 @@
 package output
 
 import (
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"net"
@@ -27,10 +28,14 @@ func (o LogRenderer) Listen(addr net.Addr) {
 	log.Info("Listening", "addr", addr)
 }
 
-func (o LogRenderer) ServingCert(pair *tls.Certificate) {
+func (o LogRenderer) KeySummary(key crypto.PublicKey, keyUse string) {
+	log := o.log.WithName("TLS")
+	log.Info("Public Key", "use", keyUse, "summary", PublicKeyInfo(key))
+}
+func (o LogRenderer) CertSummary(cert *x509.Certificate, certUse string) {
 	log := o.log.WithName("TLS")
 	// TODO: need that logStyler
-	log.Info("Serving Cert", "yes", true)
+	log.Info("Serving Cert", "use", certUse, "summary", "TODO")
 }
 
 // Connection announces the accepted connection

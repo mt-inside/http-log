@@ -1,6 +1,7 @@
 package output
 
 import (
+	"crypto"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -170,6 +171,10 @@ func (s TtyStyler) Issuer(cert *x509.Certificate) aurora.Value {
 	return s.au.Colorize(cert.Issuer.String(), s.AddrStyle)
 }
 
+func (s TtyStyler) PublicKeySummary(key crypto.PublicKey) aurora.Value {
+	return s.au.Colorize(PublicKeyInfo(key), s.NounStyle)
+}
+
 func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 	caFlag := s.au.Colorize("non-ca", s.InfoStyle)
 	if cert.IsCA {
@@ -181,7 +186,7 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 		s.Time(cert.NotBefore, true),
 		s.Time(cert.NotAfter, false),
 		s.au.Colorize(cert.Subject.String(), s.AddrStyle),
-		s.au.Colorize(PublicKeyInfo(cert.PublicKey), s.NounStyle),
+		s.PublicKeySummary(cert.PublicKey),
 		s.au.Colorize(cert.SignatureAlgorithm, s.NounStyle),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
 		caFlag,
@@ -271,6 +276,7 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 		}
 	}
 
+	fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	fmt.Println("\tCert valid?", s.YesError(err))
 }
 
@@ -307,5 +313,6 @@ func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert
 		}
 	}
 
+	fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	fmt.Println("\tCert valid?", s.YesError(err))
 }

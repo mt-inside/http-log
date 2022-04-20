@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -16,21 +15,10 @@ import (
 	"github.com/golang-jwt/jwt/v4/request"
 )
 
-func TryExtractJWT(r *http.Request, validateKeyPath string) (token *jwt.Token, tokenErr error, found bool) {
+func TryExtractJWT(r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error, found bool) {
 	var keyFunc func(token *jwt.Token) (interface{}, error) = nil
-	if validateKeyPath != "" {
-		// TODO: whoever calls this should read the file in their main function and should call parsePublicKey over it too, passing it in here
-		bytes, err := ioutil.ReadFile(validateKeyPath)
-		if err != nil {
-			return nil, err, false
-		}
-
-		publicKey, err := ParsePublicKey(bytes)
-		if err != nil {
-			return nil, err, false
-		}
-
-		keyFunc = func(token *jwt.Token) (interface{}, error) { return publicKey, err }
+	if validateKey != nil {
+		keyFunc = func(token *jwt.Token) (interface{}, error) { return validateKey, nil }
 	}
 
 	token, tokenErr = request.ParseFromRequest(
@@ -152,7 +140,7 @@ func ParseCertificate(cert []byte) (*x509.Certificate, error) {
 	}
 	return nil, err
 }
-func FromCertificate(cert *tls.Certificate) *x509.Certificate {
+func HeadFromCertificate(cert *tls.Certificate) *x509.Certificate {
 	c, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		// Assume that if we have the bytes in a tls.Certificate struct that they parse, might not be true
@@ -160,4 +148,16 @@ func FromCertificate(cert *tls.Certificate) *x509.Certificate {
 		panic(fmt.Errorf("cert doesn't parse: %w", err))
 	}
 	return c
+}
+func ChainFromCertificate(tlsCert *tls.Certificate) (x509Certs []*x509.Certificate) {
+	for _, tlsBytes := range tlsCert.Certificate {
+		x509Cert, err := x509.ParseCertificate(tlsBytes)
+		if err != nil {
+			// Assume that if we have the bytes in a tls.Certificate struct that they parse, might not be true
+			// NB: can't use output.Bios in this package; it doesn't output
+			panic(fmt.Errorf("cert doesn't parse: %w", err))
+		}
+		x509Certs = append(x509Certs, x509Cert)
+	}
+	return
 }

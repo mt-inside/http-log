@@ -50,7 +50,6 @@ func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certific
 	certCacheLock.Unlock()
 
 	settings.SerialNumber = big.NewInt(time.Now().Unix())
-	log = log.WithValues("serial", settings.SerialNumber)
 
 	var signerSettings *x509.Certificate
 	var signerKey crypto.PrivateKey
@@ -64,9 +63,6 @@ func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certific
 
 	switch algo {
 	case "rsa":
-		// TODO: use print-cert's PrintPublicKeyAlgo() on what we make (I realise we know the info but it's one less string to keep in sync)
-		log.V(1).Info("Generating keypair and x509 cert for it", "key", "rsa:4096")
-
 		key, err := rsa.GenerateKey(rand.Reader, 4096)
 		if err != nil {
 			return nil, err
@@ -92,8 +88,6 @@ func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certific
 		}
 
 	case "ecdsa":
-		log.V(1).Info("Generating keypair and x509 cert for it", "key", "ecdsa:p256")
-
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return nil, err
@@ -120,8 +114,6 @@ func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certific
 		}
 
 	case "ed25519":
-		log.V(1).Info("Generating keypair and x509 cert for it", "key", "ed25519")
-
 		pubKey, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err

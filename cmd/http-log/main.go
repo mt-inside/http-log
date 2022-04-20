@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -40,7 +40,8 @@ func init() {
 
 type renderer interface {
 	Listen(addr net.Addr)
-	ServingCert(cert *tls.Certificate)
+	KeySummary(key crypto.PublicKey, keyUse string)
+	CertSummary(cert *x509.Certificate, certUse string)
 	Connection(requestNo uint, c net.Conn)
 	TLSNegSummary(cs *tls.ClientHelloInfo)
 	TLSNegFull(cs *tls.ClientHelloInfo)
@@ -57,12 +58,13 @@ type renderer interface {
 var requestNo uint
 
 type logMiddle struct {
-	b        output.Bios
-	next     http.Handler
-	output   renderer
-	selfSign bool
-	certPair *tls.Certificate // TODO why u a pointer?
-	clientCA *x509.Certificate
+	b              output.Bios
+	next           http.Handler
+	output         renderer
+	selfSign       bool
+	certPair       *tls.Certificate // TODO why u a pointer?
+	clientCA       *x509.Certificate
+	jwtValidateKey crypto.PublicKey
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +72,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Headers */
 
 	userAgent := codec.HeaderFromRequest(r, "User-Agent")
-	jwt, jwtErr, jwtFound := codec.TryExtractJWT(r, opts.JWTValidatePath)
+	jwt, jwtErr, jwtFound := codec.TryExtractJWT(r, lm.jwtValidateKey)
 
 	if opts.HeadFull {
 		lm.output.HeadFull(r, opts.Status)
@@ -107,6 +109,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lm.next.ServeHTTP(w, r)
 }
 
+// TODO: move into main. Anything preventing that is wrong
 var opts struct {
 	// TODO: take user-specified key and cert to serve (mutex with -K)
 	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
@@ -213,18 +216,23 @@ func main() {
 				b.PrintErr("Must supply both TLS server key and certificate")
 			}
 
-			loggingMux.selfSign = false
 			servingPair, err := tls.LoadX509KeyPair(opts.Cert, opts.Key)
 			b.CheckErr(err)
 			loggingMux.certPair = &servingPair
 		}
 
 		if opts.TLSAlgo != "off" {
+			loggingMux.selfSign = true
 			loggingMux.certPair, err = utils.GenSelfSignedCa(b, opts.TLSAlgo)
 			b.CheckErr(err)
 		}
 
-		op.ServingCert(loggingMux.certPair)
+		if loggingMux.selfSign {
+			op.CertSummary(codec.HeadFromCertificate(loggingMux.certPair), "serving CA")
+		} else {
+			// TODO print whole chain here (styler has a method for this, expose on op)
+			op.CertSummary(codec.HeadFromCertificate(loggingMux.certPair), "serving")
+		}
 	}
 
 	if opts.ClientCA != "" {
@@ -237,13 +245,16 @@ func main() {
 		loggingMux.clientCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 
-		// TODO: op method (where you'll have s)
-		fmt.Println("Verifiying client certs with TODO")
+		op.CertSummary(loggingMux.clientCA, "client CA")
 	}
 
 	if opts.JWTValidatePath != "" {
-		// TODO: usual story: jwt validation key should be loaded and parsed here, stored as an x509.Certificate, and its summary printed at startup
-		fmt.Println("Verifiying JWTs with TODO")
+		bytes, err := ioutil.ReadFile(opts.JWTValidatePath)
+		b.CheckErr(err)
+		loggingMux.jwtValidateKey, err = codec.ParsePublicKey(bytes)
+		b.CheckErr(err)
+
+		op.KeySummary(loggingMux.jwtValidateKey, "JWT validation")
 	}
 
 	srv := &http.Server{
@@ -293,7 +304,9 @@ func main() {
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 				if loggingMux.selfSign {
-					return utils.GenServingCert(b, hi, loggingMux.certPair, opts.TLSAlgo)
+					cert, err := utils.GenServingCert(b, hi, loggingMux.certPair, opts.TLSAlgo)
+					//op.CertSummary(codec.HeadFromCertificate(cert), "generated serving")
+					return cert, err
 				}
 				return loggingMux.certPair, nil
 			},

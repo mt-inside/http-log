@@ -1,6 +1,7 @@
 package output
 
 import (
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -9,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/mt-inside/http-log/pkg/codec"
 )
 
 /* TODO
@@ -69,16 +68,21 @@ func (o TtyRenderer) Listen(addr net.Addr) {
 		o.s.Addr(addr.String()),
 	)
 }
-func (o TtyRenderer) ServingCert(pair *tls.Certificate) {
-	// TODO: need that parseAndRender function (in utils cause it doesn't output). Use
-	// Actually just Parse (have LoadCert/PublicKey) call it. We should render here (ie pass to cert summary)
-	// - X here
-	// - where print-cert prints its presented client cert
-	// - where genCA/servingCert prints what its made / got from the cache
+
+func (o TtyRenderer) KeySummary(key crypto.PublicKey, keyUse string) {
 	fmt.Printf(
-		"%s TLS serving cert: %s\n",
+		"%s %s public key: %s\n",
 		o.s.Info(getTimestamp()),
-		o.s.CertSummary(codec.FromCertificate(pair)),
+		keyUse,
+		o.s.PublicKeySummary(key),
+	)
+}
+func (o TtyRenderer) CertSummary(cert *x509.Certificate, certUse string) {
+	fmt.Printf(
+		"%s TLS %s cert: %s\n",
+		o.s.Info(getTimestamp()),
+		certUse,
+		o.s.CertSummary(cert),
 	)
 }
 
