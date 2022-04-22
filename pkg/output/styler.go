@@ -257,9 +257,10 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 	if caCert != nil {
-		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify
+		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify. Ie can't give an _empty_ opts.Roots
 		opts.Roots = x509.NewCertPool()
 		opts.Roots.AddCert(caCert)
+		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
 	for _, cert := range peerCerts[1:] {
 		opts.Intermediates.AddCert(cert)
@@ -276,7 +277,6 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 		}
 	}
 
-	fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	fmt.Println("\tCert valid?", s.YesError(err))
 }
 
@@ -297,6 +297,7 @@ func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert
 		// Most likely these will fail to verify a client cert, but 🤷‍♀️ the host setup
 		opts.Roots = x509.NewCertPool()
 		opts.Roots.AddCert(caCert)
+		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
 	for _, cert := range peerCerts[1:] {
 		opts.Intermediates.AddCert(cert)
@@ -313,6 +314,5 @@ func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert
 		}
 	}
 
-	fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	fmt.Println("\tCert valid?", s.YesError(err))
 }
