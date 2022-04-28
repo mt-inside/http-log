@@ -278,6 +278,7 @@ func main() {
 			// Note: ctx has a bunch of info under context-key "http-server"
 
 			requestNo++ // Think everything is single-threaded...
+			// TODO: tcp/connection op should be an option. For print-cert too.
 			op.Connection(requestNo, c)
 
 			return ctx
