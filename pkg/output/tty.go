@@ -265,7 +265,7 @@ func (o TtyRenderer) BodySummary(contentType string, contentLength int64, bs []b
 
 	o.bodyCommon(contentType, contentLength, bodyLen)
 
-	printLen := min(bodyLen, 72)
+	printLen := Min(bodyLen, 72)
 
 	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
 	fmt.Printf("%v", string(bs[0:printLen])) // assumes utf8
