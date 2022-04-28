@@ -133,10 +133,10 @@ var opts struct {
 	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
 	TLSSummary         bool   `short:"t" long:"tls" description:"Print important agreed TLS parameters"`
 	TLSFull            bool   `short:"T" long:"tls-full" description:"Print all agreed TLS parameters"`
-	HeadSummary        bool   `short:"m" long:"head" description:"Print important header values"`
-	HeadFull           bool   `short:"M" long:"head-full" description:"Print entire request head"`
-	BodySummary        bool   `short:"b" long:"body" description:"Print truncated body"`
-	BodyFull           bool   `short:"B" long:"body-full" description:"Print full body"`
+	HeadSummary        bool   `short:"m" long:"head" description:"Print important HTTP request metadata"`
+	HeadFull           bool   `short:"M" long:"head-full" description:"Print all HTTP request metadata"`
+	BodySummary        bool   `short:"b" long:"body" description:"Print truncated HTTP request body"`
+	BodyFull           bool   `short:"B" long:"body-full" description:"Print full HTTP request body"`
 }
 
 // TODO: cobra + viper(? - go-flags is really nice)
