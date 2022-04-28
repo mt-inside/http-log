@@ -145,7 +145,7 @@ func (o LogRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject,
 func (o LogRenderer) BodySummary(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("HTTP")
 	bodyLen := len(bs)
-	printLen := min(bodyLen, 72)
+	printLen := Min(bodyLen, 72)
 
 	log.Info("Body",
 		"len", contentLength,

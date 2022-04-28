@@ -148,7 +148,7 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 
 		// TODO better algo (it has a problem, think ;)
 		if newPrintLen > 80 {
-			op += s.au.Colorize(in[:min(80-printLen, len(in)-1)], style).String()
+			op += s.au.Colorize(in[:Min(80-printLen, len(in)-1)], style).String()
 			op += "..."
 			break
 		}
