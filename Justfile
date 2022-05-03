@@ -2,9 +2,9 @@ default:
 	@just --list
 
 REPO := "mtinside/http-log"
-TAG := "0.6"
+TAG := "0.7"
 
-install-linters:
+install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 
