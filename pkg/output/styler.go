@@ -120,10 +120,19 @@ func (s TtyStyler) YesInfo(test bool) aurora.Value {
 	return s.au.Colorize("no", s.InfoStyle)
 }
 func (s TtyStyler) YesError(err error) aurora.Value {
-	if err == nil {
-		return s.au.Colorize("yes", s.OkStyle)
+	if err != nil {
+		return s.au.Colorize(err, s.FailStyle)
 	}
-	return s.au.Colorize(err, s.FailStyle)
+	return s.au.Colorize("yes", s.OkStyle)
+}
+func (s TtyStyler) YesErrorWarning(err error, warning bool) aurora.Value {
+	if err != nil {
+		if warning {
+			return s.au.Colorize(err, s.WarnStyle)
+		}
+		return s.au.Colorize(err, s.FailStyle)
+	}
+	return s.au.Colorize("yes", s.OkStyle)
 }
 
 func (s TtyStyler) OptionalString(msg string, style aurora.Color) aurora.Value {
@@ -315,4 +324,37 @@ func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert
 	}
 
 	fmt.Println("\tCert valid?", s.YesError(err))
+}
+
+func (s TtyStyler) JWTSummary(start, end *time.Time, ID, subject, issuer string, audience []string) {
+	fmt.Print(s.Noun("JWT").String())
+	fmt.Printf(" [")
+	if start != nil {
+		fmt.Print(s.Time(*start, true))
+	} else {
+		fmt.Print(s.Fail("?").String())
+	}
+	fmt.Print(" -> ")
+	if end != nil {
+		fmt.Print(s.Time(*end, false))
+	} else {
+		fmt.Print(s.Fail("?").String())
+	}
+	fmt.Print("]")
+
+	if ID != "" {
+		fmt.Printf(" id %s", s.Bright(ID))
+	}
+
+	if subject != "" {
+		fmt.Printf(" subj %s", s.Addr(subject))
+	}
+
+	if issuer != "" {
+		fmt.Printf(" iss %s", s.Addr(issuer))
+	}
+
+	if len(audience) != 0 {
+		fmt.Printf(" aud %s", s.List(audience, s.AddrStyle))
+	}
 }

@@ -125,6 +125,7 @@ func (o LogRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subje
 		"sub", subject,
 		"iss", issuer,
 		"aud", strings.Join(audience, ","),
+		// TODO: do something with tokenErr
 	)
 }
 
@@ -138,6 +139,7 @@ func (o LogRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject,
 		"Signature",
 		"algo", sigAlgo,
 		"hash", hashAlgo,
+		// TODO: do something with valid & tokenErr
 	)
 }
 
