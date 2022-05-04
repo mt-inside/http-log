@@ -29,8 +29,7 @@ import (
 * combine code with lb-checker - stuff to render certs, tls.connectionstate, etc
 * option to demand client certs, print them
 * if present, print
-*   credentials
-*   - decode JWTs, allow supply of jwks to verify them
+*   basic auth credentials
  */
 
 func init() {

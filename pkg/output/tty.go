@@ -4,12 +4,15 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mt-inside/http-log/pkg/codec"
 )
 
 /* TODO
@@ -199,54 +202,23 @@ func (o TtyRenderer) HeadFull(r *http.Request, respCode int) {
 	fmt.Printf("=> %s\n", o.s.Noun(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
 }
 
-func (o TtyRenderer) jwtCommon(start, end *time.Time, ID, subject, issuer string, audience []string) {
-
-	fmt.Printf("%s JWT [", o.s.Info(getTimestamp()))
-	if start != nil {
-		fmt.Print(o.s.Time(*start, true))
-	} else {
-		fmt.Print(o.s.Fail("?").String())
-	}
-	fmt.Print(" -> ")
-	if end != nil {
-		fmt.Print(o.s.Time(*end, false))
-	} else {
-		fmt.Print(o.s.Fail("?").String())
-	}
-	fmt.Print("]")
-
-	if ID != "" {
-		fmt.Printf(" id %s", o.s.Bright(ID))
-	}
-
-	if subject != "" {
-		fmt.Printf(" subj %s", o.s.Addr(subject))
-	}
-
-	if issuer != "" {
-		fmt.Printf(" iss %s", o.s.Addr(issuer))
-	}
-
-	if len(audience) != 0 {
-		fmt.Printf(" aud %s", o.s.List(audience, o.s.AddrStyle))
-	}
-}
-
 // JWTSummary summarises the JWT in the request
 func (o TtyRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
-	o.jwtCommon(start, end, ID, subject, issuer, audience)
-	fmt.Printf(" [valid? %s]", o.s.YesError(tokenErr))
+	fmt.Printf("%s ", o.s.Info(getTimestamp()))
+	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
+	fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(tokenErr, errors.Is(tokenErr, codec.NoValidationKeyError{})))
 	fmt.Println()
 }
 
 // JWTFull prints detailed information about the JWT in the request
 func (o TtyRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
-	o.jwtCommon(start, end, ID, subject, issuer, audience)
+	fmt.Printf("%s ", o.s.Info(getTimestamp()))
+	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
 	fmt.Println()
 
 	fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
-	fmt.Println("\tvalid?", o.s.YesError(tokenErr))
+	fmt.Println("\tvalid?", o.s.YesErrorWarning(tokenErr, errors.Is(tokenErr, codec.NoValidationKeyError{})))
 }
 
 func (o TtyRenderer) bodyCommon(contentType string, contentLength int64, bodyLen int) {

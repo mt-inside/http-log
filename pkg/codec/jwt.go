@@ -2,37 +2,65 @@ package codec
 
 import (
 	"crypto"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	jwtRequest "github.com/golang-jwt/jwt/v4/request"
 )
 
+/* This jwt library is bullshit.
+* - ParseUnverified() skips semantic validation (eg expiry check) as well as signature validation
+* - but the Claims validation function is public so we can just call it ourself afterwards
+* - Parse[WithClaims]() has a weird control flow and will check for semantic validity but then overwrite (not wrap) that error with a signature validation one unless you provide a key that actually validates it (no tricks like a nil keyFunc or a keyFunc that returns nil or anything can avoid that error overwrite flow)
+* - token.Valid is set iff the *signature* is valid (though tbf ParseUnverified() skips semantic validation so when else would it be set?)
+ */
+type NoValidationKeyError struct{}
+
+func (e NoValidationKeyError) Error() string {
+	return "Signature not validated as no validation key. No other errors."
+}
+
 func TryExtractJWT(r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error, found bool) {
-	var keyFunc func(token *jwt.Token) (interface{}, error) = nil
-	if validateKey != nil {
-		keyFunc = func(token *jwt.Token) (interface{}, error) { return validateKey, nil }
+
+	// Do extraction manually, because if we use jwtRequest.ParseFromRequest() we can't ParseUnverified()
+	str, err := jwtRequest.OAuth2Extractor.ExtractToken(r) // Looks for `Authorization: Bearer foo` or body field `access_token`
+	if err != nil {
+		return nil, nil, false
 	}
+	found = true
 
-	token, tokenErr = jwtRequest.ParseFromRequest(
-		r,
-		jwtRequest.OAuth2Extractor, // Looks for `Authorization: Bearer foo` or body field `access_token`
-		keyFunc,
-		jwtRequest.WithClaims(&jwt.RegisteredClaims{}),
-		jwtRequest.WithParser(jwt.NewParser(jwt.WithoutClaimsValidation())),
-	)
+	parser := jwt.NewParser()
 
-	// Ergonomics of the jwt library are bad
-	found = tokenErr == nil || !strings.Contains(tokenErr.Error(), "no token present in request")
-	if !found {
-		// TODO: remove this eventually
-		fmt.Println("DEBUG maybe blocklist this error ie count it as a token not found?", tokenErr)
+	if validateKey != nil {
+		token, tokenErr = parser.ParseWithClaims(
+			str,
+			&jwt.RegisteredClaims{},
+			func(token *jwt.Token) (interface{}, error) { return validateKey, nil },
+		)
+	} else {
+		token, _, tokenErr = parser.ParseUnverified(
+			str,
+			&jwt.RegisteredClaims{},
+		)
+		if tokenErr == nil {
+			tokenErr = token.Claims.Valid()
+			if tokenErr == nil {
+				tokenErr = NoValidationKeyError{}
+			}
+		}
 	}
 
 	return
+}
+
+func TryParseJWT(str string) (*jwt.Token, error) {
+	parser := jwt.NewParser()
+	token, _, err := parser.ParseUnverified(
+		str,
+		&jwt.RegisteredClaims{},
+	)
+	return token, err // token.Valid is NOT set cause that's "is the signature valid" (we parse unvalidated), not "does it parse"?
 }
 
 func JWT(token *jwt.Token) (start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {

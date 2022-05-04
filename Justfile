@@ -2,7 +2,7 @@ default:
 	@just --list
 
 REPO := "mtinside/http-log"
-TAG := "0.7"
+TAG := "0.7.2"
 
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -24,7 +24,10 @@ run-daemon *ARGS: lint
 
 run-daemon-full *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -T -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/42-jwt-pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -T -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/home/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+run-daemon-full-self-sign *ARGS: lint
+	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
+	go run ./cmd/http-log -T -m -b -K=ed25519 -C=../print-cert/ssl/client-ca-cert.pem -j=/home/matt/work/personal/talks/istio-demo-master/42-jwt-pki/public.pem {{ARGS}}
 
 run-daemon-docker: package-docker
 	docker run -p8080:8080 {{REPO}}:{{TAG}}
