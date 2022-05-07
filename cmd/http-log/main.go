@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -70,7 +71,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Headers */
 
-	userAgent := codec.HeaderFromRequest(r, "User-Agent")
+	userAgent := codec.FirstHeaderFromRequest(r, "User-Agent")
 	jwt, jwtErr, jwtFound := codec.TryExtractJWT(r, lm.jwtValidateKey)
 
 	if opts.HeadFull {
@@ -88,9 +89,15 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TODO: render properly
+	hops := codec.ExtractProxies(r)
+	for _, hop := range hops {
+		fmt.Printf("%s --[http/%s tls %t]-> %s @ %s (%s)\n", hop.Client, hop.Version, hop.TLS, hop.Target, hop.Host, hop.Agent)
+	}
+
 	/* Body */
 
-	contentType := codec.HeaderFromRequest(r, "Content-Type")
+	contentType := codec.FirstHeaderFromRequest(r, "Content-Type")
 	// Print only if the method would traditionally have a body, or one has been sent
 	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
 		bs, err := io.ReadAll(r.Body)
@@ -222,7 +229,7 @@ func main() {
 
 		if opts.TLSAlgo != "off" {
 			loggingMux.selfSign = true
-			loggingMux.certPair, err = utils.GenSelfSignedCa(b, opts.TLSAlgo)
+			loggingMux.certPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
 			b.CheckErr(err)
 		}
 
@@ -304,7 +311,7 @@ func main() {
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 				if loggingMux.selfSign {
-					cert, err := utils.GenServingCert(b, hi, loggingMux.certPair, opts.TLSAlgo)
+					cert, err := utils.GenServingCert(b.GetLogger(), hi, loggingMux.certPair, opts.TLSAlgo)
 					//op.CertSummary(codec.HeadFromCertificate(cert), "generated serving")
 					return cert, err
 				}

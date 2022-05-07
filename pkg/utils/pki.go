@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -29,9 +29,9 @@ func init() {
 	certCache = make(map[string]*tls.Certificate)
 }
 
-func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
-	log := b.GetLogger().WithName("GenCertPair")
+	log = log.WithName("GenCertPair")
 
 	if len(settings.DNSNames) > 1 {
 		panic(errors.New("only support one SAN atm"))
@@ -166,7 +166,7 @@ func GenCertPair(b output.Bios, settings *x509.Certificate, parent *tls.Certific
 	return &pair, err
 }
 
-func GenSelfSignedCa(b output.Bios, algo string) (*tls.Certificate, error) {
+func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
@@ -181,12 +181,10 @@ func GenSelfSignedCa(b output.Bios, algo string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return GenCertPair(b, caSettings, nil, algo)
+	return GenCertPair(log, caSettings, nil, algo)
 }
 
-func GenServingCert(b output.Bios, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
-
-	log := b.GetLogger()
+func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
 	log.V(1).Info("TLS: get serving cert callback")
 
@@ -207,5 +205,5 @@ func GenServingCert(b output.Bios, helloInfo *tls.ClientHelloInfo, parent *tls.C
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return GenCertPair(b, servingSettings, parent, algo)
+	return GenCertPair(log, servingSettings, parent, algo)
 }
