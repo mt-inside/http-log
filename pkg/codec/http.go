@@ -56,10 +56,6 @@ type Hop struct {
 }
 
 func ExtractProxies(r *http.Request) []*Hop {
-	/*
-	 * - X-Forwaded-Host: name (TODO what mean??)
-	 * - X-Forwaded-Proto: http|https (proto used between client and LB; origin will see LB to origin)
-	 */
 
 	lastHop := &Hop{
 		Host:       "127.0.0.1",     // TODO: use our listen address
@@ -97,6 +93,8 @@ func ExtractProxies(r *http.Request) []*Hop {
 	smudgeHops(forwadedForHops)
 
 	// Build this separately from x-forwaded-for, cause not everything that sets that sets these, but these seem to always be set together, giving us a way to find the proxy identity for the hosts and protos
+	// - X-Forwaded-Host: name[:port] (original Host header)
+	// - X-Forwaded-Proto: http|https (proto used between client and LB; origin will see LB to origin)
 	forwadedForOtherHops := []*Hop{}
 	for _, server := range forwadedServers {
 		hop := &Hop{
@@ -107,14 +105,7 @@ func ExtractProxies(r *http.Request) []*Hop {
 	}
 	if len(forwadedProtos) == len(forwadedForOtherHops) {
 		for i, hop := range forwadedForOtherHops {
-			switch forwadedProtos[i] {
-			case "http":
-				hop.TLS = false
-			case "https":
-				hop.TLS = true
-			default:
-				panic(errors.New("unknown protocol in X-Forwarded-Proto header"))
-			}
+			hop.TLS = protocolIsTLS(forwadedProtos[i])
 		}
 	}
 	if len(forwadedHosts) == len(forwadedForOtherHops) {
@@ -125,7 +116,6 @@ func ExtractProxies(r *http.Request) []*Hop {
 	forwadedForOtherHops = append(forwadedForOtherHops, lastHop)
 	smudgeHops(forwadedForOtherHops)
 
-	// TODO: zip these in by stripping the port from their Host, matching to elements in the existing list
 	vias := HeaderRepeatedOrCommaSeparated(r, "Via")
 	viaHops := []*Hop{}
 	for _, v := range vias {
