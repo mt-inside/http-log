@@ -250,7 +250,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifie
 			fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
 			fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
 			fmt.Printf(
-				"\t\tSNI %s in SANs? %s (CN? %s)\n",
+				"\t\tSNI %s in SANs? %s (in CN? %s)\n",
 				s.au.Colorize(*name, s.AddrStyle),
 				s.YesError(head.VerifyHostname(addr)),
 				s.YesInfo(strings.EqualFold(head.Subject.CommonName, *name)),
