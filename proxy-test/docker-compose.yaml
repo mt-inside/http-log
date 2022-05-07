@@ -1,0 +1,45 @@
+version: "3.9"
+networks:
+  test:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+          gateway: 172.19.0.1
+services:
+  apache1:
+    image: httpd:2.4.53
+    networks:
+      test:
+        ipv4_address: 172.19.0.11
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./config/apache1/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro"
+  apache2:
+    image: httpd:2.4.53
+    networks:
+      test:
+        ipv4_address: 172.19.0.12
+    volumes:
+      - "./config/apache2/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro"
+  nginx:
+    image: nginx
+    networks:
+      test:
+        ipv4_address: 172.19.0.13
+    volumes:
+      - "./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro"
+  envoy:
+    image: docker.io/envoyproxy/envoy-distroless:v1.21.2
+    networks:
+      test:
+        ipv4_address: 172.19.0.14
+    volumes:
+      - "./config/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro"
+  http-log:
+    build: ../
+    command: ["-o=pretty", "-M"]
+    networks:
+      test:
+        ipv4_address: 172.19.0.15
