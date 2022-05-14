@@ -29,8 +29,8 @@ type renderer interface {
 	TLSFull(cs *tls.ConnectionState, clientCa *x509.Certificate)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
-	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
-	JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
+	JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string)
+	JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
 	BodySummary(contentType string, contentLength int64, body []byte)
 	BodyFull(contentType string, contentLength int64, body []byte)
 }

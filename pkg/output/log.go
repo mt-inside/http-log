@@ -114,7 +114,7 @@ func (o LogRenderer) HeadFull(r *http.Request, respCode int) {
 }
 
 // JWTSummary summarises the JWT in the request
-func (o LogRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
+func (o LogRenderer) JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string) {
 	log := o.log.WithName("Auth").WithName("JWT")
 
 	log.Info(
@@ -130,8 +130,8 @@ func (o LogRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subje
 }
 
 // JWTFull prints detailed information about the JWT in the request
-func (o LogRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
-	o.JWTSummary(tokenErr, start, end, ID, subject, issuer, audience)
+func (o LogRenderer) JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
+	o.JWTSummary(tokenErr, warning, start, end, ID, subject, issuer, audience)
 
 	log := o.log.WithName("Auth").WithName("JWT")
 

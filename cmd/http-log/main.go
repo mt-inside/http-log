@@ -49,8 +49,8 @@ type renderer interface {
 	TLSFull(cs *tls.ConnectionState, clientCA *x509.Certificate)
 	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
 	HeadFull(r *http.Request, respCode int)
-	JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string)
-	JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
+	JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string)
+	JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
 	BodySummary(contentType string, contentLength int64, body []byte)
 	BodyFull(contentType string, contentLength int64, body []byte)
 }
@@ -78,14 +78,14 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lm.output.HeadFull(r, opts.Status)
 		if jwtFound {
 			start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo := codec.JWT(jwt)
-			lm.output.JWTFull(jwtErr, start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo)
+			lm.output.JWTFull(jwtErr, errors.Is(jwtErr, codec.NoValidationKeyError{}), start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo)
 		}
 	} else if opts.HeadSummary {
 		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
 		lm.output.HeadSummary(r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
 		if jwtFound {
 			start, end, ID, subject, issuer, audience, _, _ := codec.JWT(jwt)
-			lm.output.JWTSummary(jwtErr, start, end, ID, subject, issuer, audience)
+			lm.output.JWTSummary(jwtErr, errors.Is(jwtErr, codec.NoValidationKeyError{}), start, end, ID, subject, issuer, audience)
 		}
 	}
 
