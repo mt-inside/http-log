@@ -1,18 +1,24 @@
 package output
 
+/*
+the idea is that this can be used from multiple places, even those that aren't an http daemon (expand to CF worker, envoy filter, etc)
+this class should
+- low-level methods like SetHops(), SetTLSVersion(), SetCertChain() (used behind an interface so can't be fields)
+- functions like IngestHTTPRequest should be in CODEC, make them for lambda etc too
+- then methods like printTCP, printTLS, printHTTP - caller's main decides order, flow, etc
+- think about control flow so it prints as much as it can in the face of any error - panic/recover, with a custom error type we can throw, essentially for exceptional return? What goroutine do http hooks run on?
+*/
+
 import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/mt-inside/http-log/pkg/codec"
 )
 
 /* TODO
@@ -203,22 +209,22 @@ func (o TtyRenderer) HeadFull(r *http.Request, respCode int) {
 }
 
 // JWTSummary summarises the JWT in the request
-func (o TtyRenderer) JWTSummary(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string) {
+func (o TtyRenderer) JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string) {
 	fmt.Printf("%s ", o.s.Info(getTimestamp()))
 	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
-	fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(tokenErr, errors.Is(tokenErr, codec.NoValidationKeyError{})))
+	fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(tokenErr, warning))
 	fmt.Println()
 }
 
 // JWTFull prints detailed information about the JWT in the request
-func (o TtyRenderer) JWTFull(tokenErr error, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
+func (o TtyRenderer) JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
 	fmt.Printf("%s ", o.s.Info(getTimestamp()))
 	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
 	fmt.Println()
 
 	fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
-	fmt.Println("\tvalid?", o.s.YesErrorWarning(tokenErr, errors.Is(tokenErr, codec.NoValidationKeyError{})))
+	fmt.Println("\tvalid?", o.s.YesErrorWarning(tokenErr, warning))
 }
 
 func (o TtyRenderer) bodyCommon(contentType string, contentLength int64, bodyLen int) {
