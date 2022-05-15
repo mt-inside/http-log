@@ -226,6 +226,11 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 }
 
 // TODO should return string really
+// TODO: condense this and all the below into one function, with options to
+// - verify signature (implied by non-nil caCert
+// - Print chain
+// - Print SAN info (the only difference between ServingCertChain and ClientCertChain ?)
+// - Verify an addr (parse as either ip or name) against the SANs & CN
 func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headCb func(head *x509.Certificate)) {
 
 	head := peerCerts[0]
