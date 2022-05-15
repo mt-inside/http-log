@@ -106,7 +106,7 @@ func (o TtyRenderer) CertSummary(cert *x509.Certificate, certUse string) {
 // TcpConnection announces the accepted connection
 func (o TtyRenderer) TcpConnection(r *state.RequestData) {
 	fmt.Printf(
-		"%s TCP connection %d %s->%s\n",
+		"%s TCP connection %d %s -> %s\n",
 		o.s.Info(fmtTimestamp(r.TcpConnTime)),
 		o.s.Bright(r.TcpConnNo),
 		o.s.Addr(r.TcpRemoteAddress.String()),
