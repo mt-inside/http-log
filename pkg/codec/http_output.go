@@ -60,7 +60,6 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 	d.HttpRequestTime = &now
 	d.HttpProtocolVersion = fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)
 	d.HttpMethod = r.Method
-	d.HttpHost = r.Host
 
 	// Store the unescaped (ie no %XX) values
 	// - this means they can just be used when rendering them as strings; yes they're unescaped, but that's URL-encoding for use in HTTP; eg any '&' in query parts will still be html-element encoded
@@ -71,6 +70,11 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 	d.HttpFragment = r.URL.Fragment // Ditto EscapedFragment
 
 	d.HttpHeaders = r.Header // Has a Clone() method but we're only gonna read
+	d.HttpHost = r.Host
 	d.HttpUserAgent = FirstHeaderFromRequest(r.Header, "User-Agent")
+
+	d.HttpContentLength = r.ContentLength
+	d.HttpContentType = FirstHeaderFromRequest(r.Header, "Content-Type")
+
 	d.AuthJwt, d.AuthJwtErr = ExtractAndParseJWT(r, srvData.AuthJwtValidateKey)
 }

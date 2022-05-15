@@ -239,30 +239,26 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	fmt.Printf("Responding with %s\n", o.s.Noun(fmt.Sprintf("%d %s", d.HttpResponseCode, http.StatusText(d.HttpResponseCode))))
 }
 
-// JWTSummary summarises the JWT in the request
-func (o TtyRenderer) JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string) {
-}
-
-func (o TtyRenderer) bodyCommon(contentType string, contentLength int64, bodyLen int) {
+func (o TtyRenderer) bodyCommon(r *state.RequestData, bodyLen int) {
 	fmt.Printf(
 		"%s HTTP Body: alleged %d bytes of %s, actual length read %d\n",
-		o.s.Info(getTimestamp()),
-		o.s.Bright(contentLength),
-		o.s.Noun(contentType),
+		o.s.Info(fmtTimestamp(r.HttpRequestBodyTime)),
+		o.s.Bright(r.HttpContentLength),
+		o.s.Noun(r.HttpContentType),
 		o.s.Bright(bodyLen),
 	)
 }
 
 // BodySummary summarises the application-layer request body
-func (o TtyRenderer) BodySummary(contentType string, contentLength int64, bs []byte) {
-	bodyLen := len(bs)
+func (o TtyRenderer) BodySummary(r *state.RequestData) {
+	bodyLen := len(r.HttpRequestBody)
 
-	o.bodyCommon(contentType, contentLength, bodyLen)
+	o.bodyCommon(r, bodyLen)
 
 	printLen := Min(bodyLen, 72)
 
 	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
-	fmt.Printf("%v", string(bs[0:printLen])) // assumes utf8
+	fmt.Printf("%v", string(r.HttpRequestBody[0:printLen])) // assumes utf8
 	if bodyLen > printLen {
 		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
 	}
@@ -273,13 +269,13 @@ func (o TtyRenderer) BodySummary(contentType string, contentLength int64, bs []b
 }
 
 // BodyFull prints full contents of the application-layer request body
-func (o TtyRenderer) BodyFull(contentType string, contentLength int64, bs []byte) {
-	bodyLen := len(bs)
+func (o TtyRenderer) BodyFull(r *state.RequestData) {
+	bodyLen := len(r.HttpRequestBody)
 
-	o.bodyCommon(contentType, contentLength, bodyLen)
+	o.bodyCommon(r, bodyLen)
 
 	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
-	fmt.Printf("%v", string(bs)) // assumes utf8
+	fmt.Printf("%v", string(r.HttpRequestBody)) // assumes utf8
 
 	if bodyLen > 0 {
 		fmt.Println()

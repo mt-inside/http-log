@@ -44,11 +44,7 @@ type renderer interface {
 	KeySummary(key crypto.PublicKey, keyUse string)
 	CertSummary(cert *x509.Certificate, certUse string)
 
-	// TODO: this block
 	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
-	BodySummary(contentType string, contentLength int64, body []byte)
-	BodyFull(contentType string, contentLength int64, body []byte)
-
 	TcpConnection(d *state.RequestData)
 	TLSNegSummary(d *state.RequestData)
 	TLSNegFull(d *state.RequestData)
@@ -56,6 +52,8 @@ type renderer interface {
 	TLSAgreedFull(s *state.DaemonData, r *state.RequestData)
 	HeadSummary(d *state.RequestData)
 	HeadFull(d *state.RequestData)
+	BodySummary(d *state.RequestData)
+	BodyFull(d *state.RequestData)
 }
 
 var requestNo uint
@@ -70,9 +68,13 @@ type logMiddle struct {
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	/* Headers */
-
 	codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
+
+	now := time.Now()
+	var err error
+	lm.reqData.HttpRequestBody, err = io.ReadAll(r.Body)
+	lm.reqData.HttpRequestBodyTime = &now
+	lm.b.CheckErr(err)
 
 	// TODO: render properly, move to OP
 	hops := codec.ExtractProxies(lm.reqData, lm.srvData)
@@ -82,22 +84,6 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			proto = "https"
 		}
 		fmt.Printf("%s --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
-	}
-
-	/* Body */
-
-	contentType := codec.FirstHeaderFromRequest(r.Header, "Content-Type")
-	// Print only if the method would traditionally have a body, or one has been sent
-	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
-		bs, err := io.ReadAll(r.Body)
-		lm.b.CheckErr(err)
-
-		if opts.BodyFull {
-			lm.output.BodyFull(contentType, r.ContentLength, bs)
-		} else if opts.BodySummary {
-			lm.output.BodySummary(contentType, r.ContentLength, bs)
-		}
-		codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
 	}
 
 	/* Next */
@@ -213,6 +199,14 @@ func main() {
 		} else if opts.HeadSummary {
 			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
 			op.HeadSummary(reqData)
+		}
+		// Print only if the method would traditionally have a body
+		if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
+			if opts.BodyFull {
+				op.BodyFull(reqData)
+			} else if opts.BodySummary {
+				op.BodySummary(reqData)
+			}
 		}
 	}
 
