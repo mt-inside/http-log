@@ -9,8 +9,8 @@ import (
 )
 
 type DaemonData struct {
-	TcpListenTime    *time.Time
-	TcpListenAddress net.Addr
+	TransportListenTime    *time.Time
+	TransportListenAddress net.Addr
 
 	TlsOn              bool
 	TlsServingSelfSign bool

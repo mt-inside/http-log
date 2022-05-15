@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -39,17 +38,14 @@ func init() {
 }
 
 type renderer interface {
-	// TODO: should these be a thing? Should they be on here? I think so, I think they should just all take DaemonData and be called together
-	Listen(d *state.DaemonData)
-	KeySummary(key crypto.PublicKey, keyUse string)
-	CertSummary(cert *x509.Certificate, certUse string)
+	ListenInfo(d *state.DaemonData)
 
 	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
-	TcpConnection(d *state.RequestData)
+	TransportConnection(d *state.RequestData)
 	TLSNegSummary(d *state.RequestData)
-	TLSNegFull(d *state.RequestData)
-	TLSAgreedSummary(s *state.DaemonData, r *state.RequestData)
-	TLSAgreedFull(s *state.DaemonData, r *state.RequestData)
+	TLSNegFull(r *state.RequestData, s *state.DaemonData)
+	TLSAgreedSummary(r *state.RequestData, s *state.DaemonData)
+	TLSAgreedFull(r *state.RequestData, s *state.DaemonData)
 	HeadSummary(d *state.RequestData)
 	HeadFull(d *state.RequestData)
 	BodySummary(d *state.RequestData)
@@ -75,16 +71,6 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lm.reqData.HttpRequestBody, err = io.ReadAll(r.Body)
 	lm.reqData.HttpRequestBodyTime = &now
 	lm.b.CheckErr(err)
-
-	// TODO: render properly, move to OP
-	hops := codec.ExtractProxies(lm.reqData, lm.srvData)
-	for _, hop := range hops {
-		proto := "http"
-		if hop.TLS {
-			proto = "https"
-		}
-		fmt.Printf("%s --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
-	}
 
 	/* Next */
 
@@ -182,17 +168,25 @@ func main() {
 		b.CheckErr(err)
 
 		// TODO: tcp/connection op should be an option. For print-cert too.
-		op.TcpConnection(reqData)
+		op.TransportConnection(reqData)
+		// TODO: render properly, move to OP
+		for _, hop := range reqData.HttpHops {
+			proto := "http"
+			if hop.TLS {
+				proto = "https"
+			}
+			fmt.Printf("%s --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
+		}
 		if opts.NegotiationFull {
-			op.TLSNegFull(reqData)
+			op.TLSNegFull(reqData, srvData)
 		} else if opts.NegotiationSummary {
 			op.TLSNegSummary(reqData)
 		}
 		if opts.TLSFull {
-			op.TLSAgreedFull(srvData, reqData)
+			op.TLSAgreedFull(reqData, srvData)
 		} else if opts.TLSSummary {
 			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			op.TLSAgreedSummary(srvData, reqData)
+			op.TLSAgreedSummary(reqData, srvData)
 		}
 		if opts.HeadFull {
 			op.HeadFull(reqData)
@@ -243,13 +237,6 @@ func main() {
 			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
 			b.CheckErr(err)
 		}
-
-		if srvData.TlsServingSelfSign {
-			op.CertSummary(codec.HeadFromCertificate(srvData.TlsServingCertPair), "serving CA")
-		} else {
-			// TODO print whole chain here (styler has a method for this, expose on op)
-			op.CertSummary(codec.HeadFromCertificate(srvData.TlsServingCertPair), "serving")
-		}
 	}
 
 	if opts.ClientCA != "" {
@@ -261,8 +248,6 @@ func main() {
 		b.CheckErr(err)
 		srvData.TlsClientCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
-
-		op.CertSummary(srvData.TlsClientCA, "client CA")
 	}
 
 	if opts.JWTValidatePath != "" {
@@ -270,8 +255,6 @@ func main() {
 		b.CheckErr(err)
 		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
 		b.CheckErr(err)
-
-		op.KeySummary(srvData.AuthJwtValidateKey, "JWT validation")
 	}
 
 	srv := &http.Server{
@@ -284,7 +267,10 @@ func main() {
 		// Called when the http server starts listening
 		BaseContext: func(l net.Listener) context.Context {
 			codec.ParseListener(l, srvData)
-			op.Listen(srvData) // TODO obvs shouln't be here
+
+			// Now we're listening, print server info
+			op.ListenInfo(srvData)
+
 			return context.Background()
 		},
 		// Called when the http server accepts an incoming connection
@@ -316,7 +302,9 @@ func main() {
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 				if srvData.TlsServingSelfSign {
 					cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
-					//op.CertSummary(codec.HeadFromCertificate(cert), "generated serving")
+					if err == nil {
+						reqData.TlsNegServerCert = cert
+					}
 					return cert, err
 				}
 				return srvData.TlsServingCertPair, nil
