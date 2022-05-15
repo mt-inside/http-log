@@ -13,12 +13,15 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mt-inside/http-log/pkg/codec"
+	"github.com/mt-inside/http-log/pkg/state"
 )
 
 /* TODO
@@ -59,6 +62,9 @@ import (
 func getTimestamp() string {
 	return time.Now().Format("15:04:05")
 }
+func fmtTimestamp(t *time.Time) string {
+	return t.Format("15:04:05")
+}
 
 // TtyRenderer is an output implementation that pretty-prints to a tty device
 type TtyRenderer struct {
@@ -70,14 +76,16 @@ func NewTtyRenderer(s TtyStyler) TtyRenderer {
 	return TtyRenderer{s}
 }
 
-func (o TtyRenderer) Listen(addr net.Addr) {
+// TODO: different object? Bios?
+func (o TtyRenderer) Listen(s *state.DaemonData) {
 	fmt.Printf(
 		"%s TCP listening on %s\n",
-		o.s.Info(getTimestamp()),
-		o.s.Addr(addr.String()),
+		o.s.Info(fmtTimestamp(s.TcpListenTime)),
+		o.s.Addr(s.TcpListenAddress.String()),
 	)
 }
 
+//TODO: should be here, but rename
 func (o TtyRenderer) KeySummary(key crypto.PublicKey, keyUse string) {
 	fmt.Printf(
 		"%s %s public key: %s\n",
@@ -95,136 +103,144 @@ func (o TtyRenderer) CertSummary(cert *x509.Certificate, certUse string) {
 	)
 }
 
-// Connection announces the accepted connection
-func (o TtyRenderer) Connection(requestNo uint, c net.Conn) {
+// TcpConnection announces the accepted connection
+func (o TtyRenderer) TcpConnection(r *state.RequestData) {
 	fmt.Printf(
-		"%s TCP connection %d from %s\n",
-		o.s.Info(getTimestamp()),
-		o.s.Bright(requestNo),
-		o.s.Addr(c.RemoteAddr().String()),
+		"%s TCP connection %d %s->%s\n",
+		o.s.Info(fmtTimestamp(r.TcpConnTime)),
+		o.s.Bright(r.TcpConnNo),
+		o.s.Addr(r.TcpRemoteAddress.String()),
+		o.s.Addr(r.TcpLocalAddress.String()),
 	)
 }
 
 // TLSNegSummary summarises the TLS negotiation
-func (o TtyRenderer) TLSNegSummary(hi *tls.ClientHelloInfo) {
+func (o TtyRenderer) TLSNegSummary(d *state.RequestData) {
+	// TODO: class indentPrinter, ctor takes a timestamp which is used for indent 0, ?and others?
 	fmt.Printf(
 		"%s TLS negotiation: ServerName %s\n",
-		o.s.Info(getTimestamp()),
-		o.s.Addr(hi.ServerName),
+		o.s.Info(fmtTimestamp(d.TlsNegTime)),
+		o.s.Addr(d.TlsServerName),
 	)
 }
 
 // TLSNegFull prints full details on the TLS negotiation
-func (o TtyRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
-	o.TLSNegSummary(hi)
+func (o TtyRenderer) TLSNegFull(d *state.RequestData) {
+	o.TLSNegSummary(d)
 
-	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(hi.SupportedVersions), o.s.NounStyle))
+	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(d.TlsNegVersions), o.s.NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(hi.SignatureSchemes), o.s.NounStyle))
-	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(hi.SupportedCurves), o.s.NounStyle))
-	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(hi.CipherSuites), o.s.NounStyle))
-	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(hi.SupportedProtos, o.s.NounStyle))
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(d.TlsNegSignatureSchemes), o.s.NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(d.TlsNegCurves), o.s.NounStyle))
+	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(d.TlsNegCipherSuites), o.s.NounStyle))
+	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(d.TlsNegALPN, o.s.NounStyle))
 }
 
-func (o TtyRenderer) tlsCommon(cs *tls.ConnectionState) {
+func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
 	fmt.Printf("%s %s sni %s | alpn %s\n",
-		o.s.Info(getTimestamp()),
-		o.s.Noun(TLSVersionName(cs.Version)),
-		o.s.Addr(cs.ServerName),
-		o.s.Noun(cs.NegotiatedProtocol),
+		o.s.Info(fmtTimestamp(d.TlsAgreedTime)),
+		o.s.Noun(TLSVersionName(d.TlsAgreedVersion)),
+		o.s.Addr(d.TlsServerName),
+		o.s.Noun(d.TlsAgreedALPN),
 	)
 }
 
 // TLSSummary summarises the connection transport
-func (o TtyRenderer) TLSSummary(cs *tls.ConnectionState, clientCa *x509.Certificate) {
-	o.tlsCommon(cs)
+func (o TtyRenderer) TLSAgreedSummary(s *state.DaemonData, r *state.RequestData) {
+	o.tlsAgreedCommon(r)
 
-	if len(cs.PeerCertificates) > 0 {
+	if len(r.TlsClientCerts) > 0 {
 		//TODO: CertSummaryVerified() (pass in ca, verify, just print valid? YesError() on the the end of the line)
-		fmt.Printf("%s client cert %s\n", o.s.Info(getTimestamp()), o.s.CertSummary(cs.PeerCertificates[0]))
+		fmt.Printf("\tclient cert %s\n",
+			o.s.CertSummary(r.TlsClientCerts[0]),
+		)
 	}
 }
 
 // TLSFull prints full details on the connection transport
-func (o TtyRenderer) TLSFull(cs *tls.ConnectionState, clientCa *x509.Certificate) {
-	o.tlsCommon(cs)
+func (o TtyRenderer) TLSAgreedFull(s *state.DaemonData, r *state.RequestData) {
+	o.tlsAgreedCommon(r)
 
-	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(cs.CipherSuite)))
+	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(r.TlsAgreedCipherSuite)))
 
-	if len(cs.PeerCertificates) > 0 {
-		fmt.Printf("%s client cert chains\n", o.s.Info(getTimestamp()))
-		o.s.ClientCertChainVerified(cs.PeerCertificates, clientCa)
+	if len(r.TlsClientCerts) > 0 {
+		fmt.Printf("\tclient cert received\n")
+		o.s.ClientCertChainVerified(r.TlsClientCerts, s.TlsClientCA)
 	}
 }
 
 // HeadSummary summarises the application-layer request header
-func (o TtyRenderer) HeadSummary(proto, method, vhost, ua string, url *url.URL, respCode int) {
-	// TODO render # and ? iff there are query and fragment bits
+func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	fmt.Printf(
-		"%s %s vhost %s | %s %s by %s => %s\n",
+		"%s HTTP/%s vhost %s | %s %s by %s => %s\n",
 		o.s.Info(getTimestamp()),
-		o.s.Noun(proto),
-		o.s.Addr(vhost),
-		o.s.Verb(method),
+		o.s.Noun(d.HttpProtocolVersion),
+		o.s.Addr(d.HttpHost),
+		o.s.Verb(d.HttpMethod),
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
-		o.s.UrlPath(url),
-		o.s.Noun(ua),
-		o.s.Bright(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))),
+		o.s.PathElements(d.HttpPath, d.HttpQuery, d.HttpFragment),
+		o.s.Noun(d.HttpUserAgent),
+		o.s.Bright(fmt.Sprintf("%d %s", d.HttpResponseCode, http.StatusText(d.HttpResponseCode))),
 	)
+
+	if d.AuthJwt != nil {
+		fmt.Printf("%s ", o.s.Info(getTimestamp()))
+		o.s.JWTSummary(d.AuthJwt)
+		fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
+		fmt.Println()
+	}
 }
 
 // HeadFull prints full contents of the application-layer request header
-func (o TtyRenderer) HeadFull(r *http.Request, respCode int) {
+func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	fmt.Printf(
-		"%s HTTP vhost %s | %s %s %s\n",
+		"%s HTTP/%s vhost %s | %s %s\n",
 		o.s.Info(getTimestamp()),
-		o.s.Addr(r.Host),
-		o.s.Noun(r.Proto),
-		o.s.Verb(r.Method),
-		o.s.Addr(r.URL.EscapedPath()),
+		o.s.Noun(d.HttpProtocolVersion),
+		o.s.Addr(d.HttpHost),
+		o.s.Verb(d.HttpMethod),
+		o.s.Addr(d.HttpPath),
 	)
 
-	if len(r.URL.Query()) > 0 {
+	if len(d.HttpQuery) > 0 {
 		fmt.Println("Query")
-		for k, vs := range r.URL.Query() {
+		queries, _ := url.ParseQuery(url.QueryEscape(d.HttpQuery))
+		//o.b.CheckWarn(err) TODO: we don't have a bios to hand, cause we shouldn't be parsing things this late in the game. Probably means storing duplicate (parsed/unparsed) data in reqData, but that's better than the alternative
+		for k, vs := range queries {
 			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 		}
 	}
-	if len(r.URL.RawFragment) > 0 {
-		fmt.Printf("Fragment: %s\n", o.s.Addr(r.URL.RawFragment))
+	if len(d.HttpFragment) > 0 {
+		fmt.Printf("Fragment: %s\n", o.s.Addr(d.HttpFragment))
 	}
 
 	fmt.Println("Headers")
 	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
-	for k, vs := range r.Header {
+	for k, vs := range d.HttpHeaders {
 		fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 	}
-	if len(r.Header) == 0 {
+	if len(d.HttpHeaders) == 0 {
 		fmt.Println(o.s.Info("\t<none>"))
+	}
+
+	if d.AuthJwt != nil {
+		fmt.Printf("%s ", o.s.Info(getTimestamp()))
+		o.s.JWTSummary(d.AuthJwt)
+		fmt.Println()
+
+		sigAlgo, hashAlgo := codec.JWTSignatureInfo(d.AuthJwt)
+		fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
+
+		fmt.Println("\tvalid?", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
 	}
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc
 
-	fmt.Printf("=> %s\n", o.s.Noun(fmt.Sprintf("%d %s", respCode, http.StatusText(respCode))))
+	fmt.Printf("Responding with %s\n", o.s.Noun(fmt.Sprintf("%d %s", d.HttpResponseCode, http.StatusText(d.HttpResponseCode))))
 }
 
 // JWTSummary summarises the JWT in the request
 func (o TtyRenderer) JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string) {
-	fmt.Printf("%s ", o.s.Info(getTimestamp()))
-	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
-	fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(tokenErr, warning))
-	fmt.Println()
-}
-
-// JWTFull prints detailed information about the JWT in the request
-func (o TtyRenderer) JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string) {
-	fmt.Printf("%s ", o.s.Info(getTimestamp()))
-	o.s.JWTSummary(start, end, ID, subject, issuer, audience)
-	fmt.Println()
-
-	fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
-
-	fmt.Println("\tvalid?", o.s.YesErrorWarning(tokenErr, warning))
 }
 
 func (o TtyRenderer) bodyCommon(contentType string, contentLength int64, bodyLen int) {
