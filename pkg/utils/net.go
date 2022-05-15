@@ -1,6 +1,10 @@
 package utils
 
-import "net"
+import (
+	"errors"
+	"net"
+	"strconv"
+)
 
 func HostFromHostMaybePort(hostMaybePort string) (host string) {
 	var err error
@@ -26,4 +30,13 @@ func SplitHostMaybePort(hostMaybePort string) (host, port string) {
 		port = ""
 	}
 	return
+}
+
+func SplitNetAddr(addr net.Addr) (host, port string) {
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		return a.IP.String(), strconv.Itoa(a.Port)
+	default:
+		panic(errors.New("unknown net.Addr type"))
+	}
 }

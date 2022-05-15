@@ -7,21 +7,22 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
-func FirstHeaderFromRequest(r *http.Request, key string) (value string) {
+func FirstHeaderFromRequest(headers http.Header, key string) (value string) {
 	value = ""
 
-	hs := r.Header[http.CanonicalHeaderKey(key)]
+	hs := headers[http.CanonicalHeaderKey(key)]
 	if len(hs) >= 1 { // len(nil) == 0
 		value = hs[0]
 	}
 
 	return
 }
-func HeaderRepeatedOrCommaSeparated(r *http.Request, key string) []string {
-	hs := r.Header[http.CanonicalHeaderKey(key)]
+func HeaderRepeatedOrCommaSeparated(headers http.Header, key string) []string {
+	hs := headers[http.CanonicalHeaderKey(key)]
 	if len(hs) == 1 {
 		hs = strings.Split(hs[0], ",") // works fine if string doesn't contain ','
 	}
@@ -45,35 +46,36 @@ func HeaderFromMap(headers map[string]interface{}, key string) (value string) {
 // - its `host` address is the `client` of the first Hop
 // - its `agent` is the user-agent header (should be preserved by all intermediaries)
 type Hop struct {
-	Host       string // The address/name of the agent itself
-	HostPort   string // The port of the agent
-	Agent      string // The agent software
-	Client     string // The address of the client connecting to it (should match `host` of the previous Hop)
+	ClientHost string // The address of the client connecting to it (should match `host` of the previous Hop)
 	ClientPort string // The (calling) port of the client (won't match `HostPort`)
-	TLS        bool   // TLS status of the incoming connection
-	Version    string // HTTP version of the incoming connection
-	Target     string // HTTP Host header of the incoming connection
+	//TODO: should have a ClientAgent, which can be populated by user-agent for the first hop, and smuged around for the others
+
+	TLS     bool   // TLS status of the incoming connection
+	Version string // HTTP version of the incoming connection
+	VHost   string // HTTP Host header of the incoming connection
+
+	ServerHost  string // The address/name of the agent itself
+	ServerPort  string // The port of the agent
+	ServerAgent string // The agent software
 }
 
-func ExtractProxies(r *http.Request) []*Hop {
+func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
 
 	lastHop := &Hop{
-		Host:       "127.0.0.1",     // TODO: use our listen address
-		HostPort:   "8080",          // TODO: use our listen address
-		Agent:      "http-log v0.5", // TODO from build pkg when we do that
-		Client:     utils.HostFromHostMaybePort(r.RemoteAddr),
-		ClientPort: utils.PortFromHostMaybePort(r.RemoteAddr),
-		TLS:        r.TLS != nil,
-		Version:    fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor),
-		Target:     r.Host,
+		TLS:         s.TlsOn,
+		Version:     r.HttpProtocolVersion,
+		VHost:       r.HttpHost,
+		ServerAgent: "http-log v0.5", // TODO from build pkg when we do that
 	}
+	lastHop.ClientHost, lastHop.ClientPort = utils.SplitNetAddr(r.TcpRemoteAddress)
+	lastHop.ServerHost, lastHop.ServerPort = utils.SplitNetAddr(r.TcpLocalAddress)
 
 	// Empirically:
 	// - Apache2: appends x-forwaded-[for,host,server]; overwrites x-forwaded-proto
 	// - Nginx: appends x-forwaded-for; ? others
 	// - Envoy: appends x-forwaded-for; ? others
 
-	forwadeds := HeaderRepeatedOrCommaSeparated(r, "Forwarded")
+	forwadeds := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "Forwarded")
 	forwadedHops := []*Hop{}
 	for _, f := range forwadeds {
 		forwadedHops = append(forwadedHops, parseForwaded(f))
@@ -81,10 +83,10 @@ func ExtractProxies(r *http.Request) []*Hop {
 	forwadedHops = append(forwadedHops, lastHop)
 	smudgeHops(forwadedHops)
 
-	forwadedFors := HeaderRepeatedOrCommaSeparated(r, "X-Forwarded-For")
-	forwadedHosts := HeaderRepeatedOrCommaSeparated(r, "X-Forwarded-Host")
-	forwadedProtos := HeaderRepeatedOrCommaSeparated(r, "X-Forwarded-Proto")
-	forwadedServers := HeaderRepeatedOrCommaSeparated(r, "X-Forwarded-Server")
+	forwadedFors := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-For")
+	forwadedHosts := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Host")
+	forwadedProtos := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Proto")
+	forwadedServers := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Server")
 	forwadedForHops := []*Hop{}
 	for _, f := range forwadedFors {
 		forwadedForHops = append(forwadedForHops, parseXForwadedFor(f))
@@ -98,8 +100,8 @@ func ExtractProxies(r *http.Request) []*Hop {
 	forwadedForOtherHops := []*Hop{}
 	for _, server := range forwadedServers {
 		hop := &Hop{
-			Host:     utils.HostFromHostMaybePort(server),
-			HostPort: utils.PortFromHostMaybePort(server),
+			ServerHost: utils.HostFromHostMaybePort(server),
+			ServerPort: utils.PortFromHostMaybePort(server),
 		}
 		forwadedForOtherHops = append(forwadedForOtherHops, hop)
 	}
@@ -110,13 +112,13 @@ func ExtractProxies(r *http.Request) []*Hop {
 	}
 	if len(forwadedHosts) == len(forwadedForOtherHops) {
 		for i, hop := range forwadedForOtherHops {
-			hop.Target = forwadedHosts[i]
+			hop.VHost = forwadedHosts[i]
 		}
 	}
 	forwadedForOtherHops = append(forwadedForOtherHops, lastHop)
 	smudgeHops(forwadedForOtherHops)
 
-	vias := HeaderRepeatedOrCommaSeparated(r, "Via")
+	vias := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "Via")
 	viaHops := []*Hop{}
 	for _, v := range vias {
 		viaHops = append(viaHops, parseVia(v))
@@ -169,11 +171,11 @@ func parseForwaded(forwaded string) *Hop {
 		value := field[pivot+1:]
 		switch key {
 		case "by":
-			h.Host, h.HostPort = utils.SplitHostMaybePort(value)
+			h.ServerHost, h.ServerPort = utils.SplitHostMaybePort(value)
 		case "for":
-			h.Client, h.ClientPort = utils.SplitHostMaybePort(value)
+			h.ClientHost, h.ClientPort = utils.SplitHostMaybePort(value)
 		case "host":
-			h.Target = value
+			h.VHost = value
 		case "proto":
 			h.TLS = protocolIsTLS(value)
 		default:
@@ -193,10 +195,10 @@ func parseVia(via string) *Hop {
 	if len(fields) != 2 && len(fields) != 3 {
 		panic(fmt.Errorf("malformed Via header: '%s'", via))
 	}
-	proto := fields[0]                                       // can be split into host and optional port
-	h.Host, h.HostPort = utils.SplitHostMaybePort(fields[1]) // might be proxy host[:port] or might be a "pseudonym" for the proxy. Unable to tell pseudonym from host-without-port I think
+	proto := fields[0]                                               // can be split into host and optional port
+	h.ServerHost, h.ServerPort = utils.SplitHostMaybePort(fields[1]) // might be proxy host[:port] or might be a "pseudonym" for the proxy. Unable to tell pseudonym from host-without-port I think
 	if len(fields) == 3 {
-		h.Agent = fields[2]
+		h.ServerAgent = fields[2]
 	}
 
 	protoParts := strings.Split(proto, "/")
@@ -217,18 +219,18 @@ func parseXForwadedFor(xff string) *Hop {
 	h := &Hop{}
 
 	// X-Forwaded-For: ip, <repeat>
-	h.Client = utils.HostFromHostMaybePort(xff) // Spec says no port but just in case
+	h.ClientHost = utils.HostFromHostMaybePort(xff) // Spec says no port but just in case
 
 	return h
 }
 
 func smudgeHops(hops []*Hop) {
 	for i := range hops {
-		if hops[i].Client == "" && i >= 1 {
-			hops[i].Client = hops[i-1].Host
+		if hops[i].ClientHost == "" && i >= 1 {
+			hops[i].ClientHost = hops[i-1].ServerHost
 		}
-		if hops[i].Host == "" && i <= len(hops)-1-1 {
-			hops[i].Host = hops[i+1].Client
+		if hops[i].ServerHost == "" && i <= len(hops)-1-1 {
+			hops[i].ServerHost = hops[i+1].ClientHost
 		}
 	}
 }
@@ -239,12 +241,12 @@ func mergeHops(hopses [][]*Hop) []*Hop {
 		}
 		var i int
 		for _, hop := range hopses[0] {
-			if seconadry[i].Host == hop.Host {
-				if hop.Agent == "" {
-					hop.Agent = seconadry[i].Agent
+			if seconadry[i].ServerHost == hop.ServerHost {
+				if hop.ServerAgent == "" {
+					hop.ServerAgent = seconadry[i].ServerAgent
 				}
-				if hop.Client == "" {
-					hop.Client = seconadry[i].Client
+				if hop.ClientHost == "" {
+					hop.ClientHost = seconadry[i].ClientHost
 				}
 				if hop.ClientPort == "" {
 					hop.ClientPort = seconadry[i].ClientPort
@@ -253,8 +255,8 @@ func mergeHops(hopses [][]*Hop) []*Hop {
 				if hop.Version == "" {
 					hop.Version = seconadry[i].Version
 				}
-				if hop.Target == "" {
-					hop.Target = seconadry[i].Target
+				if hop.VHost == "" {
+					hop.VHost = seconadry[i].VHost
 				}
 
 				if i == len(seconadry)-1 {

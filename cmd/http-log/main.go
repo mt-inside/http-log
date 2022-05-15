@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
+	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
@@ -39,65 +39,52 @@ func init() {
 }
 
 type renderer interface {
-	Listen(addr net.Addr)
+	// TODO: this block
+	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
+	Listen(d *state.DaemonData)
 	KeySummary(key crypto.PublicKey, keyUse string)
 	CertSummary(cert *x509.Certificate, certUse string)
-	Connection(requestNo uint, c net.Conn)
-	TLSNegSummary(cs *tls.ClientHelloInfo)
-	TLSNegFull(cs *tls.ClientHelloInfo)
-	TLSSummary(cs *tls.ConnectionState, clientCA *x509.Certificate)
-	TLSFull(cs *tls.ConnectionState, clientCA *x509.Certificate)
-	HeadSummary(proto, method, host, ua string, url *url.URL, respCode int)
-	HeadFull(r *http.Request, respCode int)
-	JWTSummary(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string)
-	JWTFull(tokenErr error, warning bool, start, end *time.Time, ID, subject, issuer string, audience []string, sigAlgo, hashAlgo string)
 	BodySummary(contentType string, contentLength int64, body []byte)
 	BodyFull(contentType string, contentLength int64, body []byte)
+
+	TcpConnection(d *state.RequestData)
+	TLSNegSummary(d *state.RequestData)
+	TLSNegFull(d *state.RequestData)
+	TLSAgreedSummary(s *state.DaemonData, r *state.RequestData)
+	TLSAgreedFull(s *state.DaemonData, r *state.RequestData)
+	HeadSummary(d *state.RequestData)
+	HeadFull(d *state.RequestData)
 }
 
 var requestNo uint
 
 type logMiddle struct {
-	b              output.Bios
-	next           http.Handler
-	output         renderer
-	selfSign       bool
-	certPair       *tls.Certificate // TODO why u a pointer?
-	clientCA       *x509.Certificate
-	jwtValidateKey crypto.PublicKey
+	b       output.Bios
+	next    http.Handler
+	output  renderer
+	reqData *state.RequestData
+	srvData *state.DaemonData
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Headers */
 
-	userAgent := codec.FirstHeaderFromRequest(r, "User-Agent")
-	jwt, jwtErr, jwtFound := codec.TryExtractJWT(r, lm.jwtValidateKey)
+	codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
 
-	if opts.HeadFull {
-		lm.output.HeadFull(r, opts.Status)
-		if jwtFound {
-			start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo := codec.JWT(jwt)
-			lm.output.JWTFull(jwtErr, errors.Is(jwtErr, codec.NoValidationKeyError{}), start, end, ID, subject, issuer, audience, sigAlgo, hashAlgo)
-		}
-	} else if opts.HeadSummary {
-		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-		lm.output.HeadSummary(r.Proto, r.Method, r.Host, userAgent, r.URL, opts.Status)
-		if jwtFound {
-			start, end, ID, subject, issuer, audience, _, _ := codec.JWT(jwt)
-			lm.output.JWTSummary(jwtErr, errors.Is(jwtErr, codec.NoValidationKeyError{}), start, end, ID, subject, issuer, audience)
-		}
-	}
-
-	// TODO: render properly
-	hops := codec.ExtractProxies(r)
+	// TODO: render properly, move to OP
+	hops := codec.ExtractProxies(lm.reqData, lm.srvData)
 	for _, hop := range hops {
-		fmt.Printf("%s --[http/%s tls %t]-> %s @ %s (%s)\n", hop.Client, hop.Version, hop.TLS, hop.Target, hop.Host, hop.Agent)
+		proto := "http"
+		if hop.TLS {
+			proto = "https"
+		}
+		fmt.Printf("%s --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
 	}
 
 	/* Body */
 
-	contentType := codec.FirstHeaderFromRequest(r, "Content-Type")
+	contentType := codec.FirstHeaderFromRequest(r.Header, "Content-Type")
 	// Print only if the method would traditionally have a body, or one has been sent
 	if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
 		bs, err := io.ReadAll(r.Body)
@@ -108,6 +95,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if opts.BodySummary {
 			lm.output.BodySummary(contentType, r.ContentLength, bs)
 		}
+		codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
 	}
 
 	/* Next */
@@ -153,6 +141,9 @@ func main() {
 		panic(err)
 	}
 
+	srvData := state.NewDaemonData()
+	reqData := state.NewRequestData()
+
 	if opts.Output == "auto" {
 		if isatty.IsTerminal(os.Stdout.Fd()) {
 			opts.Output = "pretty"
@@ -177,7 +168,8 @@ func main() {
 		// TODO: verbosity option
 		l := usvc.GetLogger(false, 0)
 		b = output.NewLogBios(l)
-		op = output.NewLogRenderer(l)
+		//op = output.NewLogRenderer(l) FIXME
+		//op = output.NewTtyRenderer(s)
 	default:
 		panic(errors.New("bottom"))
 	}
@@ -197,21 +189,44 @@ func main() {
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
 		w.WriteHeader(opts.Status)
+		reqData.HttpResponseCode = opts.Status
 		_, err = w.Write(bytes)
 		b.CheckErr(err)
+
+		// TODO: tcp/connection op should be an option. For print-cert too.
+		op.TcpConnection(reqData)
+		if opts.NegotiationFull {
+			op.TLSNegFull(reqData)
+		} else if opts.NegotiationSummary {
+			op.TLSNegSummary(reqData)
+		}
+		if opts.TLSFull {
+			op.TLSAgreedFull(srvData, reqData)
+		} else if opts.TLSSummary {
+			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+			op.TLSAgreedSummary(srvData, reqData)
+		}
+		if opts.HeadFull {
+			op.HeadFull(reqData)
+		} else if opts.HeadSummary {
+			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+			op.HeadSummary(reqData)
+		}
 	}
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", handler)
 	loggingMux := &logMiddle{
-		b:      b,
-		next:   mux,
-		output: op,
+		b:       b,
+		next:    mux,
+		output:  op,
+		reqData: reqData,
+		srvData: srvData,
 	}
 
-	https := false
+	srvData.TlsOn = false
 	if opts.Cert != "" || opts.Key != "" || opts.TLSAlgo != "off" {
-		https = true
+		srvData.TlsOn = true
 
 		if opts.Cert != "" || opts.Key != "" {
 			if opts.TLSAlgo != "off" {
@@ -224,43 +239,43 @@ func main() {
 
 			servingPair, err := tls.LoadX509KeyPair(opts.Cert, opts.Key)
 			b.CheckErr(err)
-			loggingMux.certPair = &servingPair
+			srvData.TlsServingCertPair = &servingPair
 		}
 
 		if opts.TLSAlgo != "off" {
-			loggingMux.selfSign = true
-			loggingMux.certPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
+			srvData.TlsServingSelfSign = true
+			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
 			b.CheckErr(err)
 		}
 
-		if loggingMux.selfSign {
-			op.CertSummary(codec.HeadFromCertificate(loggingMux.certPair), "serving CA")
+		if srvData.TlsServingSelfSign {
+			op.CertSummary(codec.HeadFromCertificate(srvData.TlsServingCertPair), "serving CA")
 		} else {
 			// TODO print whole chain here (styler has a method for this, expose on op)
-			op.CertSummary(codec.HeadFromCertificate(loggingMux.certPair), "serving")
+			op.CertSummary(codec.HeadFromCertificate(srvData.TlsServingCertPair), "serving")
 		}
 	}
 
 	if opts.ClientCA != "" {
-		if !https {
+		if !srvData.TlsOn {
 			b.PrintErr("Can't verify TLS client certs without serving TLS")
 		}
 
 		bytes, err := ioutil.ReadFile(opts.ClientCA)
 		b.CheckErr(err)
-		loggingMux.clientCA, err = codec.ParseCertificate(bytes)
+		srvData.TlsClientCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 
-		op.CertSummary(loggingMux.clientCA, "client CA")
+		op.CertSummary(srvData.TlsClientCA, "client CA")
 	}
 
 	if opts.JWTValidatePath != "" {
 		bytes, err := ioutil.ReadFile(opts.JWTValidatePath)
 		b.CheckErr(err)
-		loggingMux.jwtValidateKey, err = codec.ParsePublicKey(bytes)
+		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
 		b.CheckErr(err)
 
-		op.KeySummary(loggingMux.jwtValidateKey, "JWT validation")
+		op.KeySummary(srvData.AuthJwtValidateKey, "JWT validation")
 	}
 
 	srv := &http.Server{
@@ -270,52 +285,45 @@ func main() {
 		WriteTimeout:      120 * time.Second, // Time for writing response (headers + body?)
 		IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
 		Handler:           loggingMux,
+		// Called when the http server starts listening
 		BaseContext: func(l net.Listener) context.Context {
-			if https {
-				// l is a *tls.listener but it's unexported so can't cast to it
-				op.Listen(l.Addr())
-			} else {
-				lis := l.(*net.TCPListener)
-				op.Listen(lis.Addr())
-			}
+			codec.ParseListener(l, srvData)
+			op.Listen(srvData) // TODO obvs shouln't be here
 			return context.Background()
 		},
+		// Called when the http server accepts an incoming connection
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			// Note: ctx has a bunch of info under context-key "http-server"
 
 			requestNo++ // Think everything is single-threaded...
-			// TODO: tcp/connection op should be an option. For print-cert too.
-			op.Connection(requestNo, c)
+			codec.ParseNetConn(c, requestNo, reqData)
 
 			return ctx
 		},
+		// Called when an http server connection changes state
 		ConnState: func(c net.Conn, cs http.ConnState) {
 			b.Trace("HTTP server connection state change", "State", cs)
 		},
 	}
 
-	if https {
+	if srvData.TlsOn {
 		srv.TLSConfig = &tls.Config{
 			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				b.Trace("TLS ClientHello received")
 
-				if opts.NegotiationFull {
-					op.TLSNegFull(hi)
-				} else if opts.NegotiationSummary {
-					op.TLSNegSummary(hi)
-				}
+				codec.ParseTlsClientHello(hi, reqData)
 
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				if loggingMux.selfSign {
-					cert, err := utils.GenServingCert(b.GetLogger(), hi, loggingMux.certPair, opts.TLSAlgo)
+				if srvData.TlsServingSelfSign {
+					cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
 					//op.CertSummary(codec.HeadFromCertificate(cert), "generated serving")
 					return cert, err
 				}
-				return loggingMux.certPair, nil
+				return srvData.TlsServingCertPair, nil
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				b.Trace("TLS built-in cert verification finished")
@@ -324,12 +332,7 @@ func main() {
 			VerifyConnection: func(cs tls.ConnectionState) error {
 				b.Trace("TLS: all cert verification finished")
 
-				if opts.TLSFull {
-					op.TLSFull(&cs, loggingMux.clientCA)
-				} else if opts.TLSSummary {
-					// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-					op.TLSSummary(&cs, loggingMux.clientCA)
-				}
+				codec.ParseTlsConnectionState(&cs, reqData)
 
 				return nil // can inspect all connection and TLS info and reject
 			},

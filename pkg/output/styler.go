@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/logrusorgru/aurora/v3"
 )
 
@@ -70,6 +71,7 @@ func (s TtyStyler) Bright(v interface{}) aurora.Value {
 func (s TtyStyler) UrlPath(u *url.URL) string {
 	var b strings.Builder
 
+	// TODO: should probably use the unescaped versions of these, ie u.Path, url.UnescapeQuery(u.RawQuery), u.Fragment
 	if len(u.EscapedPath()) > 0 {
 		b.WriteString(s.Addr(u.EscapedPath()).String())
 	} else {
@@ -84,6 +86,27 @@ func (s TtyStyler) UrlPath(u *url.URL) string {
 	if len(u.EscapedFragment()) > 0 {
 		b.WriteString("#")
 		b.WriteString(s.Addr(u.EscapedFragment()).String())
+	}
+
+	return b.String()
+}
+func (s TtyStyler) PathElements(path, query, fragment string) string {
+	var b strings.Builder
+
+	if len(path) > 0 {
+		b.WriteString(s.Addr(path).String())
+	} else {
+		b.WriteString(s.Addr("/").String())
+	}
+
+	if len(query) > 0 {
+		b.WriteString("?")
+		b.WriteString(s.Verb(query).String())
+	}
+
+	if len(fragment) > 0 {
+		b.WriteString("#")
+		b.WriteString(s.Addr(fragment).String())
 	}
 
 	return b.String()
@@ -292,11 +315,11 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 // TODO should return string really
 // ClientCertChain prints the entire cert chain, rendering information relevant to client certs.
 // This function does not attempt to veryify the certs, and should only be used for eg printing certs that we present, not that we receive
-func (s TtyStyler) ClientCertChain(peerCerts, verifiedCerts []*x509.Certificate) {
-	s.certChain(peerCerts, verifiedCerts, nil)
+func (s TtyStyler) ClientCertChain(clientCerts, verifiedCerts []*x509.Certificate) {
+	s.certChain(clientCerts, verifiedCerts, nil)
 }
 
-func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert *x509.Certificate) {
+func (s TtyStyler) ClientCertChainVerified(clientCerts []*x509.Certificate, caCert *x509.Certificate) {
 	opts := x509.VerifyOptions{
 		Intermediates: x509.NewCertPool(),
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
@@ -308,53 +331,67 @@ func (s TtyStyler) ClientCertChainVerified(peerCerts []*x509.Certificate, caCert
 		opts.Roots.AddCert(caCert)
 		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
-	for _, cert := range peerCerts[1:] {
+	for _, cert := range clientCerts[1:] {
 		opts.Intermediates.AddCert(cert)
 	}
 
-	chains, err := peerCerts[0].Verify(opts)
-	if err != nil {
-		s.ClientCertChain(peerCerts, nil)
-		fmt.Println()
-	} else {
-		for _, chain := range chains {
-			s.ClientCertChain(peerCerts, chain)
+	validChains, err := clientCerts[0].Verify(opts)
+	fmt.Println("\tCert valid?", s.YesError(err))
+	if err == nil {
+		fmt.Println("\tValidation chain(s):")
+		for _, chain := range validChains {
+			s.ClientCertChain(clientCerts, chain)
 			fmt.Println()
 		}
+	} else {
+		s.ClientCertChain(clientCerts, nil)
+		fmt.Println()
 	}
-
-	fmt.Println("\tCert valid?", s.YesError(err))
 }
 
-func (s TtyStyler) JWTSummary(start, end *time.Time, ID, subject, issuer string, audience []string) {
+func (s TtyStyler) JWTSummary(token *jwt.Token) {
 	fmt.Print(s.Noun("JWT").String())
+	claims := token.Claims.(*jwt.RegisteredClaims)
+
+	/* Times */
+
 	fmt.Printf(" [")
+
+	start := claims.IssuedAt
+	if claims.NotBefore != nil {
+		start = claims.NotBefore
+	}
 	if start != nil {
-		fmt.Print(s.Time(*start, true))
+		fmt.Print(s.Time(start.Time, true))
 	} else {
 		fmt.Print(s.Fail("?").String())
 	}
+
 	fmt.Print(" -> ")
-	if end != nil {
-		fmt.Print(s.Time(*end, false))
+
+	if claims.ExpiresAt != nil {
+		fmt.Print(s.Time(claims.ExpiresAt.Time, false))
 	} else {
 		fmt.Print(s.Fail("?").String())
 	}
+
 	fmt.Print("]")
 
-	if ID != "" {
-		fmt.Printf(" id %s", s.Bright(ID))
+	/* Other claims */
+
+	if claims.ID != "" {
+		fmt.Printf(" id %s", s.Bright(claims.ID))
 	}
 
-	if subject != "" {
-		fmt.Printf(" subj %s", s.Addr(subject))
+	if claims.Subject != "" {
+		fmt.Printf(" subj %s", s.Addr(claims.Subject))
 	}
 
-	if issuer != "" {
-		fmt.Printf(" iss %s", s.Addr(issuer))
+	if claims.Issuer != "" {
+		fmt.Printf(" iss %s", s.Addr(claims.Issuer))
 	}
 
-	if len(audience) != 0 {
-		fmt.Printf(" aud %s", s.List(audience, s.AddrStyle))
+	if len(claims.Audience) != 0 {
+		fmt.Printf(" aud %s", s.List(claims.Audience, s.AddrStyle))
 	}
 }
