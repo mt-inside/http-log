@@ -13,23 +13,23 @@ import (
 
 func ParseListener(l net.Listener, d *state.DaemonData) {
 	now := time.Now()
-	d.TcpListenTime = &now
+	d.TransportListenTime = &now
 
 	switch lis := l.(type) {
 	case *net.TCPListener:
-		d.TcpListenAddress = lis.Addr()
+		d.TransportListenAddress = lis.Addr()
 	default: // assume it's an (unexported) *tls.listener
-		d.TcpListenAddress = l.Addr()
+		d.TransportListenAddress = l.Addr()
 	}
 }
 
 //TODO; move to codec.tcp.go
 func ParseNetConn(c net.Conn, requestNo uint, d *state.RequestData) {
 	now := time.Now()
-	d.TcpConnTime = &now
-	d.TcpConnNo = requestNo
-	d.TcpRemoteAddress = c.RemoteAddr()
-	d.TcpLocalAddress = c.LocalAddr()
+	d.TransportConnTime = &now
+	d.TransportConnNo = requestNo
+	d.TransportRemoteAddress = c.RemoteAddr()
+	d.TransportLocalAddress = c.LocalAddr()
 }
 
 func ParseTlsClientHello(hi *tls.ClientHelloInfo, d *state.RequestData) {
@@ -75,6 +75,8 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 
 	d.HttpContentLength = r.ContentLength
 	d.HttpContentType = FirstHeaderFromRequest(r.Header, "Content-Type")
+
+	d.HttpHops = ExtractProxies(d, srvData)
 
 	d.AuthJwt, d.AuthJwtErr = ExtractAndParseJWT(r, srvData.AuthJwtValidateKey)
 }

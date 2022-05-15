@@ -40,35 +40,16 @@ func HeaderFromMap(headers map[string]interface{}, key string) (value string) {
 	return
 }
 
-// Hop describes a forwarding / receiving agent and the connection into it.
-// Note that it makes sense to model ourselves and every proxy that's been on route, but not the original client
-// - it doesn't have a connection going into it
-// - its `host` address is the `client` of the first Hop
-// - its `agent` is the user-agent header (should be preserved by all intermediaries)
-type Hop struct {
-	ClientHost string // The address of the client connecting to it (should match `host` of the previous Hop)
-	ClientPort string // The (calling) port of the client (won't match `HostPort`)
-	//TODO: should have a ClientAgent, which can be populated by user-agent for the first hop, and smuged around for the others
+func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 
-	TLS     bool   // TLS status of the incoming connection
-	Version string // HTTP version of the incoming connection
-	VHost   string // HTTP Host header of the incoming connection
-
-	ServerHost  string // The address/name of the agent itself
-	ServerPort  string // The port of the agent
-	ServerAgent string // The agent software
-}
-
-func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
-
-	lastHop := &Hop{
+	lastHop := &state.Hop{
 		TLS:         s.TlsOn,
 		Version:     r.HttpProtocolVersion,
 		VHost:       r.HttpHost,
 		ServerAgent: "http-log v0.5", // TODO from build pkg when we do that
 	}
-	lastHop.ClientHost, lastHop.ClientPort = utils.SplitNetAddr(r.TcpRemoteAddress)
-	lastHop.ServerHost, lastHop.ServerPort = utils.SplitNetAddr(r.TcpLocalAddress)
+	lastHop.ClientHost, lastHop.ClientPort = utils.SplitNetAddr(r.TransportRemoteAddress)
+	lastHop.ServerHost, lastHop.ServerPort = utils.SplitNetAddr(r.TransportLocalAddress)
 
 	// Empirically:
 	// - Apache2: appends x-forwaded-[for,host,server]; overwrites x-forwaded-proto
@@ -76,7 +57,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
 	// - Envoy: appends x-forwaded-for; ? others
 
 	forwadeds := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "Forwarded")
-	forwadedHops := []*Hop{}
+	forwadedHops := []*state.Hop{}
 	for _, f := range forwadeds {
 		forwadedHops = append(forwadedHops, parseForwaded(f))
 	}
@@ -87,7 +68,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
 	forwadedHosts := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Host")
 	forwadedProtos := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Proto")
 	forwadedServers := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-Server")
-	forwadedForHops := []*Hop{}
+	forwadedForHops := []*state.Hop{}
 	for _, f := range forwadedFors {
 		forwadedForHops = append(forwadedForHops, parseXForwadedFor(f))
 	}
@@ -97,9 +78,9 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
 	// Build this separately from x-forwaded-for, cause not everything that sets that sets these, but these seem to always be set together, giving us a way to find the proxy identity for the hosts and protos
 	// - X-Forwaded-Host: name[:port] (original Host header)
 	// - X-Forwaded-Proto: http|https (proto used between client and LB; origin will see LB to origin)
-	forwadedForOtherHops := []*Hop{}
+	forwadedForOtherHops := []*state.Hop{}
 	for _, server := range forwadedServers {
-		hop := &Hop{
+		hop := &state.Hop{
 			ServerHost: utils.HostFromHostMaybePort(server),
 			ServerPort: utils.PortFromHostMaybePort(server),
 		}
@@ -119,14 +100,14 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*Hop {
 	smudgeHops(forwadedForOtherHops)
 
 	vias := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "Via")
-	viaHops := []*Hop{}
+	viaHops := []*state.Hop{}
 	for _, v := range vias {
 		viaHops = append(viaHops, parseVia(v))
 	}
 	viaHops = append(viaHops, lastHop)
 	smudgeHops(viaHops)
 
-	hopses := [][]*Hop{
+	hopses := [][]*state.Hop{
 		forwadedForHops,
 		forwadedHops,
 		forwadedForOtherHops,
@@ -160,8 +141,8 @@ func protocolIsTLS(protocol string) bool {
 	}
 }
 
-func parseForwaded(forwaded string) *Hop {
-	h := &Hop{}
+func parseForwaded(forwaded string) *state.Hop {
+	h := &state.Hop{}
 
 	// Forwaded: by=<incoming interface>;for=<caller>;host=<host it was looking for>;proto=<http|https>,...
 	fields := strings.Split(forwaded, ";")
@@ -186,8 +167,8 @@ func parseForwaded(forwaded string) *Hop {
 	return h
 }
 
-func parseVia(via string) *Hop {
-	h := &Hop{}
+func parseVia(via string) *state.Hop {
+	h := &state.Hop{}
 
 	// Via: HTTP/1.1 proxy.foo.com:8080, <repeat>
 	// Via: 1.1 proxy.foo.com, <repeat> (proxy's name)
@@ -215,8 +196,8 @@ func parseVia(via string) *Hop {
 	return h
 }
 
-func parseXForwadedFor(xff string) *Hop {
-	h := &Hop{}
+func parseXForwadedFor(xff string) *state.Hop {
+	h := &state.Hop{}
 
 	// X-Forwaded-For: ip, <repeat>
 	h.ClientHost = utils.HostFromHostMaybePort(xff) // Spec says no port but just in case
@@ -224,7 +205,7 @@ func parseXForwadedFor(xff string) *Hop {
 	return h
 }
 
-func smudgeHops(hops []*Hop) {
+func smudgeHops(hops []*state.Hop) {
 	for i := range hops {
 		if hops[i].ClientHost == "" && i >= 1 {
 			hops[i].ClientHost = hops[i-1].ServerHost
@@ -234,7 +215,7 @@ func smudgeHops(hops []*Hop) {
 		}
 	}
 }
-func mergeHops(hopses [][]*Hop) []*Hop {
+func mergeHops(hopses [][]*state.Hop) []*state.Hop {
 	for _, seconadry := range hopses[1:] {
 		if len(seconadry) == 0 {
 			break // if this is empty we know all the others after it will be because of the sort so we're done

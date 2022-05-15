@@ -10,9 +10,7 @@ this class should
 */
 
 import (
-	"crypto"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -76,41 +74,50 @@ func NewTtyRenderer(s TtyStyler) TtyRenderer {
 	return TtyRenderer{s}
 }
 
-// TODO: different object? Bios?
-func (o TtyRenderer) Listen(s *state.DaemonData) {
+func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 	fmt.Printf(
-		"%s TCP listening on %s\n",
-		o.s.Info(fmtTimestamp(s.TcpListenTime)),
-		o.s.Addr(s.TcpListenAddress.String()),
+		"%s Listening on %s %s\n",
+		o.s.Info(fmtTimestamp(s.TransportListenTime)),
+		o.s.Noun(s.TransportListenAddress.Network()),
+		o.s.Addr(s.TransportListenAddress.String()),
 	)
+
+	if s.TlsOn {
+		if s.TlsServingSelfSign {
+			fmt.Printf(
+				"\tTLS serving CA cert: %s\n",
+				o.s.CertSummary(codec.HeadFromCertificate(s.TlsServingCertPair)),
+			)
+		} else {
+			fmt.Printf("\tTLS serving cert:\n")
+			o.s.ServingCertChain(codec.ChainFromCertificate(s.TlsServingCertPair))
+		}
+		if s.TlsClientCA != nil {
+			fmt.Printf(
+				"\tTLS client CA cert: %s\n",
+				o.s.CertSummary(s.TlsClientCA),
+			)
+		}
+	}
+	if s.AuthJwtValidateKey != nil {
+		fmt.Printf(
+			"\tJWT validation public key: %s\n",
+			o.s.PublicKeySummary(s.AuthJwtValidateKey),
+		)
+	}
+
+	fmt.Println()
 }
 
-//TODO: should be here, but rename
-func (o TtyRenderer) KeySummary(key crypto.PublicKey, keyUse string) {
+// TransportConnection announces the accepted connection
+func (o TtyRenderer) TransportConnection(r *state.RequestData) {
 	fmt.Printf(
-		"%s %s public key: %s\n",
-		o.s.Info(getTimestamp()),
-		keyUse,
-		o.s.PublicKeySummary(key),
-	)
-}
-func (o TtyRenderer) CertSummary(cert *x509.Certificate, certUse string) {
-	fmt.Printf(
-		"%s TLS %s cert: %s\n",
-		o.s.Info(getTimestamp()),
-		certUse,
-		o.s.CertSummary(cert),
-	)
-}
-
-// TcpConnection announces the accepted connection
-func (o TtyRenderer) TcpConnection(r *state.RequestData) {
-	fmt.Printf(
-		"%s TCP connection %d %s -> %s\n",
-		o.s.Info(fmtTimestamp(r.TcpConnTime)),
-		o.s.Bright(r.TcpConnNo),
-		o.s.Addr(r.TcpRemoteAddress.String()),
-		o.s.Addr(r.TcpLocalAddress.String()),
+		"%s Connection %d %s %s -> %s\n",
+		o.s.Info(fmtTimestamp(r.TransportConnTime)),
+		o.s.Bright(r.TransportConnNo),
+		o.s.Noun(r.TransportRemoteAddress.Network()),
+		o.s.Addr(r.TransportRemoteAddress.String()),
+		o.s.Addr(r.TransportLocalAddress.String()),
 	)
 }
 
@@ -125,15 +132,20 @@ func (o TtyRenderer) TLSNegSummary(d *state.RequestData) {
 }
 
 // TLSNegFull prints full details on the TLS negotiation
-func (o TtyRenderer) TLSNegFull(d *state.RequestData) {
-	o.TLSNegSummary(d)
+func (o TtyRenderer) TLSNegFull(r *state.RequestData, s *state.DaemonData) {
+	o.TLSNegSummary(r)
 
-	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(d.TlsNegVersions), o.s.NounStyle))
+	if s.TlsServingSelfSign {
+		fmt.Printf("\tpresenting serving cert:\n")
+		o.s.ServingCertChain(codec.ChainFromCertificate(r.TlsNegServerCert))
+	}
+
+	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(r.TlsNegVersions), o.s.NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(d.TlsNegSignatureSchemes), o.s.NounStyle))
-	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(d.TlsNegCurves), o.s.NounStyle))
-	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(d.TlsNegCipherSuites), o.s.NounStyle))
-	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(d.TlsNegALPN, o.s.NounStyle))
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(r.TlsNegSignatureSchemes), o.s.NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(r.TlsNegCurves), o.s.NounStyle))
+	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(r.TlsNegCipherSuites), o.s.NounStyle))
+	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(r.TlsNegALPN, o.s.NounStyle))
 }
 
 func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
@@ -146,7 +158,7 @@ func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
 }
 
 // TLSSummary summarises the connection transport
-func (o TtyRenderer) TLSAgreedSummary(s *state.DaemonData, r *state.RequestData) {
+func (o TtyRenderer) TLSAgreedSummary(r *state.RequestData, s *state.DaemonData) {
 	o.tlsAgreedCommon(r)
 
 	if len(r.TlsClientCerts) > 0 {
@@ -158,7 +170,7 @@ func (o TtyRenderer) TLSAgreedSummary(s *state.DaemonData, r *state.RequestData)
 }
 
 // TLSFull prints full details on the connection transport
-func (o TtyRenderer) TLSAgreedFull(s *state.DaemonData, r *state.RequestData) {
+func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 	o.tlsAgreedCommon(r)
 
 	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(r.TlsAgreedCipherSuite)))

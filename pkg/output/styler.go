@@ -229,7 +229,7 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headCb func(head *x509.Certificate)) {
 
 	head := peerCerts[0]
-	fmt.Printf("\t0 (presented): %s\n", s.CertSummary(head))
+	fmt.Printf("\t0: %s\n", s.CertSummary(head))
 	if headCb != nil {
 		headCb(head)
 	}
@@ -242,11 +242,14 @@ func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headC
 	for i := 1; i < len(certs); i++ {
 		fmt.Printf("\t%d", i)
 
-		if i < len(peerCerts) && certs[i].Equal(peerCerts[i]) {
-			fmt.Printf(" (presented):")
-		} else {
-			fmt.Printf(" (installed):")
+		if verifiedCerts != nil {
+			if i < len(peerCerts) && certs[i].Equal(peerCerts[i]) {
+				fmt.Printf(" (presented)")
+			} else {
+				fmt.Printf(" (installed)")
+			}
 		}
+		fmt.Printf(":")
 
 		fmt.Printf(" %s\n", s.CertSummary(certs[i]))
 	}
@@ -254,10 +257,20 @@ func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headC
 	fmt.Printf("\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
 }
 
+func (s TtyStyler) ServingCertChain(servingChain []*x509.Certificate) {
+	s.certChain(
+		servingChain, nil,
+		func(head *x509.Certificate) {
+			fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+			fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
+		},
+	)
+}
+
 // TODO just take an addr string, try parse as IP, if so use "[ip.String()]"
 // ServingCertChain prints the entire cert chain, rendering information relevant to server certs.
 // This function does not attempt to veryify the certs, and should only be used for eg printing certs that we present, not that we receive
-func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifiedCerts []*x509.Certificate) {
+func (s TtyStyler) ServingCertChainVerifyName(servingChain []*x509.Certificate, name *string, ip *net.IP) {
 	var addr string
 	if name != nil {
 		addr = *name
@@ -268,7 +281,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifie
 	}
 
 	s.certChain(
-		peerCerts, verifiedCerts,
+		servingChain, nil,
 		func(head *x509.Certificate) {
 			fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
 			fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
@@ -282,7 +295,7 @@ func (s TtyStyler) ServingCertChain(name *string, ip *net.IP, peerCerts, verifie
 	)
 }
 
-func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certificate, caCert *x509.Certificate) {
+func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Certificate, name string, caCert *x509.Certificate) {
 	opts := x509.VerifyOptions{
 		DNSName:       name,
 		Intermediates: x509.NewCertPool(),
@@ -294,17 +307,41 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 		opts.Roots.AddCert(caCert)
 		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
-	for _, cert := range peerCerts[1:] {
+	for _, cert := range servingChain[1:] {
 		opts.Intermediates.AddCert(cert)
 	}
 
-	chains, err := peerCerts[0].Verify(opts)
+	validChains, err := servingChain[0].Verify(opts)
 	if err != nil {
-		s.ServingCertChain(&name, nil, peerCerts, nil)
+		s.certChain(
+			servingChain, nil,
+			func(head *x509.Certificate) {
+				fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+				fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
+				fmt.Printf(
+					"\t\tSNI %s in SANs? %s (in CN? %s)\n",
+					s.au.Colorize(name, s.AddrStyle),
+					s.YesError(head.VerifyHostname(name)),
+					s.YesInfo(strings.EqualFold(head.Subject.CommonName, name)),
+				)
+			},
+		)
 		fmt.Println()
 	} else {
-		for _, chain := range chains {
-			s.ServingCertChain(&name, nil, peerCerts, chain)
+		for _, chain := range validChains {
+			s.certChain(
+				servingChain, chain,
+				func(head *x509.Certificate) {
+					fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+					fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
+					fmt.Printf(
+						"\t\tSNI %s in SANs? %s (in CN? %s)\n",
+						s.au.Colorize(name, s.AddrStyle),
+						s.YesError(head.VerifyHostname(name)),
+						s.YesInfo(strings.EqualFold(head.Subject.CommonName, name)),
+					)
+				},
+			)
 			fmt.Println()
 		}
 	}
@@ -315,11 +352,11 @@ func (s TtyStyler) ServingCertChainVerified(name string, peerCerts []*x509.Certi
 // TODO should return string really
 // ClientCertChain prints the entire cert chain, rendering information relevant to client certs.
 // This function does not attempt to veryify the certs, and should only be used for eg printing certs that we present, not that we receive
-func (s TtyStyler) ClientCertChain(clientCerts, verifiedCerts []*x509.Certificate) {
-	s.certChain(clientCerts, verifiedCerts, nil)
+func (s TtyStyler) ClientCertChain(clientChain, verifiedCerts []*x509.Certificate) {
+	s.certChain(clientChain, verifiedCerts, nil)
 }
 
-func (s TtyStyler) ClientCertChainVerified(clientCerts []*x509.Certificate, caCert *x509.Certificate) {
+func (s TtyStyler) ClientCertChainVerified(clientChain []*x509.Certificate, caCert *x509.Certificate) {
 	opts := x509.VerifyOptions{
 		Intermediates: x509.NewCertPool(),
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
@@ -331,20 +368,20 @@ func (s TtyStyler) ClientCertChainVerified(clientCerts []*x509.Certificate, caCe
 		opts.Roots.AddCert(caCert)
 		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
-	for _, cert := range clientCerts[1:] {
+	for _, cert := range clientChain[1:] {
 		opts.Intermediates.AddCert(cert)
 	}
 
-	validChains, err := clientCerts[0].Verify(opts)
+	validChains, err := clientChain[0].Verify(opts)
 	fmt.Println("\tCert valid?", s.YesError(err))
 	if err == nil {
 		fmt.Println("\tValidation chain(s):")
 		for _, chain := range validChains {
-			s.ClientCertChain(clientCerts, chain)
+			s.ClientCertChain(clientChain, chain)
 			fmt.Println()
 		}
 	} else {
-		s.ClientCertChain(clientCerts, nil)
+		s.ClientCertChain(clientChain, nil)
 		fmt.Println()
 	}
 }
