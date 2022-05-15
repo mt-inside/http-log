@@ -39,11 +39,13 @@ func init() {
 }
 
 type renderer interface {
-	// TODO: this block
-	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
+	// TODO: should these be a thing? Should they be on here? I think so, I think they should just all take DaemonData and be called together
 	Listen(d *state.DaemonData)
 	KeySummary(key crypto.PublicKey, keyUse string)
 	CertSummary(cert *x509.Certificate, certUse string)
+
+	// TODO: this block
+	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
 	BodySummary(contentType string, contentLength int64, body []byte)
 	BodyFull(contentType string, contentLength int64, body []byte)
 
