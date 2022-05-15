@@ -36,21 +36,25 @@ type RequestData struct {
 	HttpRequestTime     *time.Time
 	HttpProtocolVersion string
 	HttpMethod          string
+
 	// All unescaped, ie have had the %XX used on the wire replaced with real characters
 	HttpPath     string
 	HttpQuery    string
 	HttpFragment string
 
 	HttpHeaders   http.Header
-	HttpUserAgent string
 	HttpHost      string
+	HttpUserAgent string
 
 	AuthJwt    *jwt.Token
 	AuthJwtErr error
 
-	HttpResponseCode int
+	HttpContentLength   int64
+	HttpContentType     string
+	HttpRequestBody     []byte
+	HttpRequestBodyTime *time.Time // When the body finished being read
 
-	HttpBodyBytes []byte
+	HttpResponseCode int
 }
 
 func NewRequestData() *RequestData {
