@@ -228,6 +228,8 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 	fmt.Println("Headers")
 	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
+	// TODO: Truncate header values (even for Full), have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
+	// TODO: truncate to max(72, terminal width)
 	for k, vs := range d.HttpHeaders {
 		fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 	}
