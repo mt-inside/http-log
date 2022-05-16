@@ -51,3 +51,4 @@ package-docker:
 
 publish-docker: package-docker
 	docker push {{REPO}}:{{TAG}}
+	hub-tool tag ls {{REPO}}
