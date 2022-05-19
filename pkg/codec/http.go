@@ -42,6 +42,8 @@ func HeaderFromMap(headers map[string]interface{}, key string) (value string) {
 
 func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 
+	firstClientAgent := FirstHeaderFromRequest(r.HttpHeaders, "User-Agent")
+
 	lastHop := &state.Hop{
 		TLS:         s.TlsOn,
 		Version:     r.HttpProtocolVersion,
@@ -62,6 +64,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 		forwadedHops = append(forwadedHops, parseForwaded(f))
 	}
 	forwadedHops = append(forwadedHops, lastHop)
+	forwadedHops[0].ClientAgent = firstClientAgent
 	smudgeHops(forwadedHops)
 
 	forwadedFors := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "X-Forwarded-For")
@@ -73,6 +76,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 		forwadedForHops = append(forwadedForHops, parseXForwadedFor(f))
 	}
 	forwadedForHops = append(forwadedForHops, lastHop)
+	forwadedForHops[0].ClientAgent = firstClientAgent
 	smudgeHops(forwadedForHops)
 
 	// Build this separately from x-forwaded-for, cause not everything that sets that sets these, but these seem to always be set together, giving us a way to find the proxy identity for the hosts and protos
@@ -97,6 +101,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 		}
 	}
 	forwadedForOtherHops = append(forwadedForOtherHops, lastHop)
+	forwadedForOtherHops[0].ClientAgent = firstClientAgent
 	smudgeHops(forwadedForOtherHops)
 
 	vias := HeaderRepeatedOrCommaSeparated(r.HttpHeaders, "Via")
@@ -105,6 +110,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 		viaHops = append(viaHops, parseVia(v))
 	}
 	viaHops = append(viaHops, lastHop)
+	viaHops[0].ClientAgent = firstClientAgent
 	smudgeHops(viaHops)
 
 	hopses := [][]*state.Hop{
@@ -207,11 +213,28 @@ func parseXForwadedFor(xff string) *state.Hop {
 
 func smudgeHops(hops []*state.Hop) {
 	for i := range hops {
-		if hops[i].ClientHost == "" && i >= 1 {
-			hops[i].ClientHost = hops[i-1].ServerHost
+		if i >= 1 {
+			if hops[i].ClientHost == "" {
+				hops[i].ClientHost = hops[i-1].ServerHost
+			}
+			if hops[i].ClientPort == "" {
+				hops[i].ClientPort = hops[i-1].ServerPort
+			}
+			if hops[i].ClientAgent == "" {
+				hops[i].ClientAgent = hops[i-1].ServerAgent
+			}
 		}
-		if hops[i].ServerHost == "" && i <= len(hops)-1-1 {
-			hops[i].ServerHost = hops[i+1].ClientHost
+
+		if i <= len(hops)-1-1 {
+			if hops[i].ServerHost == "" {
+				hops[i].ServerHost = hops[i+1].ClientHost
+			}
+			if hops[i].ServerPort == "" {
+				hops[i].ServerPort = hops[i+1].ClientPort
+			}
+			if hops[i].ServerAgent == "" {
+				hops[i].ServerAgent = hops[i+1].ClientAgent
+			}
 		}
 	}
 }

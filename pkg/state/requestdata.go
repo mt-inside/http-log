@@ -70,9 +70,9 @@ func NewRequestData() *RequestData {
 // - its `host` address is the `client` of the first Hop
 // - its `agent` is the user-agent header (should be preserved by all intermediaries)
 type Hop struct {
-	ClientHost string // The address of the client connecting to it (should match `host` of the previous Hop)
-	ClientPort string // The (calling) port of the client (won't match `HostPort`)
-	//TODO: should have a ClientAgent, which can be populated by user-agent for the first hop, and smuged around for the others
+	ClientHost  string // The address of the client connecting to it (should match `host` of the previous Hop)
+	ClientPort  string // The (calling) port of the client (won't match `HostPort`)
+	ClientAgent string // The agent software
 
 	TLS     bool   // TLS status of the incoming connection
 	Version string // HTTP version of the incoming connection
