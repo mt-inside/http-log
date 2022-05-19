@@ -175,7 +175,7 @@ func main() {
 			if hop.TLS {
 				proto = "https"
 			}
-			fmt.Printf("%s --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
+			fmt.Printf("%s (%s) --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), hop.ClientAgent, proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
 		}
 		if opts.NegotiationFull {
 			op.TLSNegFull(reqData, srvData)
