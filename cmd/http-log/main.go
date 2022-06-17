@@ -19,6 +19,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/state"
@@ -38,6 +39,7 @@ func init() {
 }
 
 type renderer interface {
+	Version()
 	ListenInfo(d *state.DaemonData)
 
 	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
@@ -155,11 +157,11 @@ func main() {
 		opts.HeadSummary = true
 	}
 
-	b.Trace("http-log", "version", "0.5")
+	op.Version()
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		// TODO (where? mux?) print the proxy route to get here - all x-forwarded-for, via, etc headers. test in istio. does go transparently handle proxy protocol?
-		w.Header().Set("server", "http-log 0.5")
+		w.Header().Set("server", build.NameAndVersion())
 		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
 		w.Header().Set("Content-Type", mime)
 		w.WriteHeader(opts.Status)

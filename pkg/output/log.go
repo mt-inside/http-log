@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/mt-inside/http-log/pkg/build"
 )
 
 // LogRenderer is an output implementation that logs using zapr
@@ -21,6 +22,11 @@ type LogRenderer struct {
 // NewLogRenderer returns a new outputter than logs using zapr
 func NewLogRenderer(log logr.Logger) LogRenderer {
 	return LogRenderer{log}
+}
+
+func (o LogRenderer) Version() {
+	log := o.log.WithName("Version")
+	log.Info("Build", "build", build.NameAndVersion())
 }
 
 func (o LogRenderer) Listen(addr net.Addr) {
