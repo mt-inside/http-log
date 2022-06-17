@@ -179,16 +179,18 @@ func main() {
 			}
 			fmt.Printf("%s (%s) --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), hop.ClientAgent, proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
 		}
-		if opts.NegotiationFull {
-			op.TLSNegFull(reqData, srvData)
-		} else if opts.NegotiationSummary {
-			op.TLSNegSummary(reqData)
-		}
-		if opts.TLSFull {
-			op.TLSAgreedFull(reqData, srvData)
-		} else if opts.TLSSummary {
-			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			op.TLSAgreedSummary(reqData, srvData)
+		if srvData.TlsOn {
+			if opts.NegotiationFull {
+				op.TLSNegFull(reqData, srvData)
+			} else if opts.NegotiationSummary {
+				op.TLSNegSummary(reqData)
+			}
+			if opts.TLSFull {
+				op.TLSAgreedFull(reqData, srvData)
+			} else if opts.TLSSummary {
+				// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+				op.TLSAgreedSummary(reqData, srvData)
+			}
 		}
 		if opts.HeadFull {
 			op.HeadFull(reqData)
