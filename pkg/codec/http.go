@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
@@ -48,7 +49,7 @@ func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 		TLS:         s.TlsOn,
 		Version:     r.HttpProtocolVersion,
 		VHost:       r.HttpHost,
-		ServerAgent: "http-log v0.5", // TODO from build pkg when we do that
+		ServerAgent: build.NameAndVersion(),
 	}
 	lastHop.ClientHost, lastHop.ClientPort = utils.SplitNetAddr(r.TransportRemoteAddress)
 	lastHop.ServerHost, lastHop.ServerPort = utils.SplitNetAddr(r.TransportLocalAddress)

@@ -2,7 +2,9 @@ default:
 	@just --list
 
 REPO := "mtinside/http-log"
-TAG := "0.7.4"
+TAG := `git describe --tags --abbrev`
+TAGD := `git describe --tags --abbrev --dirty`
+ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
 
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -44,11 +46,14 @@ run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: lint
 	go run ./cmd/http-log -N -T -M -B -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/home/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-docker: package-docker
-	docker run -p8080:8080 {{REPO}}:{{TAG}}
+	docker run -ti -p8080:8080 {{REPO}}:{{TAG}}
 
 package-docker:
-	docker build -t {{REPO}}:{{TAG}} .
+	docker buildx build --build-arg VERSION={{TAGD}} -t {{REPO}}:{{TAG}} -t {{REPO}}:latest --load .
+publish-docker:
+	docker buildx build --platform={{ARCHS}} -t {{REPO}}:{{TAG}} -t {{REPO}}:latest --push .
 
-publish-docker: package-docker
-	docker push {{REPO}}:{{TAG}}
-	hub-tool tag ls {{REPO}}
+docker-ls:
+	hub-tool tag ls --platforms {{REPO}}
+docker-inspect:
+	docker buildx imagetools inspect {{REPO}}:{{TAG}}

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/state"
 )
@@ -72,6 +73,14 @@ type TtyRenderer struct {
 // NewTtyRenderer returns a new outputter than pretty-prints to a tty device
 func NewTtyRenderer(s TtyStyler) TtyRenderer {
 	return TtyRenderer{s}
+}
+
+func (o TtyRenderer) Version() {
+	fmt.Printf(
+		"%s %s\n",
+		o.s.Info(getTimestamp()),
+		o.s.Noun(build.NameAndVersion()),
+	)
 }
 
 func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
