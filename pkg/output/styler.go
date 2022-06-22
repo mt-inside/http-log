@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/logrusorgru/aurora/v3"
+	"github.com/mt-inside/go-usvc"
 )
 
 const TimeFmt = "2006 Jan _2 15:04:05"
@@ -180,7 +181,7 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 
 		// TODO better algo (it has a problem, think ;)
 		if newPrintLen > 80 {
-			op += s.au.Colorize(in[:Min(80-printLen, len(in)-1)], style).String()
+			op += s.au.Colorize(in[:usvc.MinInt(80-printLen, len(in)-1)], style).String()
 			op += "..."
 			break
 		}

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/state"
@@ -278,7 +279,7 @@ func (o TtyRenderer) BodySummary(r *state.RequestData) {
 
 	o.bodyCommon(r, bodyLen)
 
-	printLen := Min(bodyLen, 72)
+	printLen := usvc.MinInt(bodyLen, 72)
 
 	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
 	fmt.Printf("%v", string(r.HttpRequestBody[0:printLen])) // assumes utf8
