@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/mt-inside/go-usvc"
 	"github.com/mt-inside/http-log/pkg/build"
 )
 
@@ -153,7 +154,7 @@ func (o LogRenderer) JWTFull(tokenErr error, warning bool, start, end *time.Time
 func (o LogRenderer) BodySummary(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("HTTP")
 	bodyLen := len(bs)
-	printLen := Min(bodyLen, 72)
+	printLen := usvc.MinInt(bodyLen, 72)
 
 	log.Info("Body",
 		"len", contentLength,
