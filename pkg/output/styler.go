@@ -311,7 +311,6 @@ func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Cert
 		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify. Ie can't give an _empty_ opts.Roots
 		opts.Roots = x509.NewCertPool()
 		opts.Roots.AddCert(caCert)
-		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
 	for _, cert := range servingChain[1:] {
 		opts.Intermediates.AddCert(cert)
@@ -352,7 +351,10 @@ func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Cert
 		}
 	}
 
-	fmt.Println("\tCert valid?", s.YesError(err))
+	if caCert != nil {
+		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
+		fmt.Println("\tCert valid?", s.YesError(err))
+	}
 }
 
 // TODO should return string really
@@ -372,23 +374,26 @@ func (s TtyStyler) ClientCertChainVerified(clientChain []*x509.Certificate, caCe
 		// Most likely these will fail to verify a client cert, but 🤷‍♀️ the host setup
 		opts.Roots = x509.NewCertPool()
 		opts.Roots.AddCert(caCert)
-		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
 	}
 	for _, cert := range clientChain[1:] {
 		opts.Intermediates.AddCert(cert)
 	}
 
 	validChains, err := clientChain[0].Verify(opts)
-	fmt.Println("\tCert valid?", s.YesError(err))
-	if err == nil {
+	if err != nil {
+		s.certChain(clientChain, nil, nil)
+		fmt.Println()
+	} else {
 		fmt.Println("\tValidation chain(s):")
 		for _, chain := range validChains {
-			s.ClientCertChain(clientChain, chain)
+			s.certChain(clientChain, chain, nil)
 			fmt.Println()
 		}
-	} else {
-		s.ClientCertChain(clientChain, nil)
-		fmt.Println()
+	}
+
+	if caCert != nil {
+		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
+		fmt.Println("\tCert valid?", s.YesError(err))
 	}
 }
 
