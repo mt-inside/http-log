@@ -71,10 +71,10 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 
 	d.HttpHeaders = r.Header // Has a Clone() method but we're only gonna read
 	d.HttpHost = r.Host
-	d.HttpUserAgent = FirstHeaderFromRequest(r.Header, "User-Agent")
+	d.HttpUserAgent = r.Header.Get("User-Agent")
 
 	d.HttpContentLength = r.ContentLength
-	d.HttpContentType = FirstHeaderFromRequest(r.Header, "Content-Type")
+	d.HttpContentType = r.Header.Get("Content-Type")
 
 	d.HttpHops = ExtractProxies(d, srvData)
 

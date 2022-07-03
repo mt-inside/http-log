@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -52,43 +53,197 @@ type renderer interface {
 	HeadFull(d *state.RequestData)
 	BodySummary(d *state.RequestData)
 	BodyFull(d *state.RequestData)
+	// ResponseSummary(d *state.ResponseData)
+	ResponseFull(d *state.ResponseData)
 }
 
 var requestNo uint
 
 type logMiddle struct {
-	b       output.Bios
-	next    http.Handler
-	output  renderer
-	reqData *state.RequestData
-	srvData *state.DaemonData
+	b        output.Bios
+	op       renderer
+	reqData  *state.RequestData
+	respData *state.ResponseData
+	srvData  *state.DaemonData
+	next     http.Handler
 }
 
 func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	/* Record request info */
 
 	codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
 
 	now := time.Now()
 	var err error
-	lm.reqData.HttpRequestBody, err = io.ReadAll(r.Body)
-	lm.reqData.HttpRequestBodyTime = &now
+	lm.reqData.HttpBody, err = io.ReadAll(r.Body)
+	lm.reqData.HttpBodyTime = &now
 	lm.b.CheckErr(err)
 
 	/* Next */
 
 	lm.next.ServeHTTP(w, r)
+
+	/* Request-response is over: print */
+	lm.output()
+}
+
+func (lm logMiddle) output() {
+
+	// TODO: tcp/connection op should be an option. For print-cert too.
+	lm.op.TransportConnection(lm.reqData)
+
+	// TODO: render properly, move to OP
+	for _, hop := range lm.reqData.HttpHops {
+		proto := "http"
+		if hop.TLS {
+			proto = "https"
+		}
+		fmt.Printf("%s (%s) --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), hop.ClientAgent, proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
+	}
+
+	if lm.srvData.TlsOn {
+		if opts.NegotiationFull {
+			lm.op.TLSNegFull(lm.reqData, lm.srvData)
+		} else if opts.NegotiationSummary {
+			lm.op.TLSNegSummary(lm.reqData)
+		}
+		if opts.TLSFull {
+			lm.op.TLSAgreedFull(lm.reqData, lm.srvData)
+		} else if opts.TLSSummary {
+			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+			lm.op.TLSAgreedSummary(lm.reqData, lm.srvData)
+		}
+	}
+
+	if opts.HeadFull {
+		lm.op.HeadFull(lm.reqData)
+	} else if opts.HeadSummary {
+		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+		lm.op.HeadSummary(lm.reqData)
+	}
+
+	// Print only if the method would traditionally have a body
+	if (opts.BodyFull || opts.BodySummary) && (lm.reqData.HttpMethod == http.MethodPost || lm.reqData.HttpMethod == http.MethodPut || lm.reqData.HttpMethod == http.MethodPatch) {
+		if opts.BodyFull {
+			lm.op.BodyFull(lm.reqData)
+		} else if opts.BodySummary {
+			lm.op.BodySummary(lm.reqData)
+		}
+	}
+
+	// TODO: ResponseSummary
+	// TODO: both should be optional, default: no response info for replyHandler, imply response summary in proxy mode
+	lm.op.ResponseFull(lm.respData)
+}
+
+type responseHandler struct {
+	respData *state.ResponseData
+}
+
+func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	/* Header */
+
+	w.Header().Set("server", build.NameAndVersion())
+	bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
+	w.Header().Set("Content-Type", mime)
+	w.WriteHeader(opts.Status)
+	rh.respData.HttpHeaderTime = time.Now()
+	rh.respData.HttpStatusCode = opts.Status
+
+	/* Body */
+
+	n, _ := w.Write(bytes)
+	rh.respData.HttpBodyTime = time.Now()
+	rh.respData.HttpContentLength = int64(len(bytes))
+	rh.respData.HttpContentType = mime
+	rh.respData.HttpBody = bytes
+	rh.respData.HttpBodyLen = int64(n)
+	// TODO: do an op if n != content-length header. Don't bail out though - best effort is what we want for this
+}
+
+type passthroughHandler struct {
+	url      *url.URL
+	respData *state.ResponseData
+}
+
+var hopHeaders = map[string]bool{
+	"Connection":          true,
+	"Keep-Alive":          true,
+	"Proxy-Authenticate":  true,
+	"Proxy-Authorization": true,
+	"Te":                  true,
+	"Trailers":            true,
+	"Transfer-Encoding":   true,
+	"Upgrade":             true,
+}
+
+func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				dialer := &net.Dialer{}
+				conn, err := dialer.DialContext(ctx, network, address)
+				ph.respData.PassthroughLocalAddress = conn.LocalAddr()
+				ph.respData.PassthroughRemoteAddress = conn.RemoteAddr()
+				return conn, err
+			},
+		},
+	}
+	req.RequestURI = "" // Can't be set on client requests
+	if ph.url != nil {
+		req.URL = ph.url
+	}
+	// TODO: is it an issue that LoggMiddle's read the body already? Test with a request body from the original client
+	ph.respData.PassthroughURL = req.URL
+	for h := range hopHeaders {
+		req.Header.Del(h)
+	}
+	// TODO: we're currently running stealth; we should actually announce ourselves with xff etc as we're active at L7
+	// see: https://gist.github.com/yowu/f7dc34bd4736a65ff28d
+	// Also: calculate the hops array after we've done all this, ie the chain we print should include us and the upstream
+	ph.respData.ProxyRequestTime = time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Error forwarding request", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	for k, vs := range resp.Header {
+		if hopHeaders[k] {
+			continue
+		}
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	ph.respData.HttpHeaderTime = time.Now()
+	ph.respData.HttpStatusCode = resp.StatusCode
+
+	n, _ := io.Copy(w, resp.Body) // Nothing we can really do about these errors cause the headers have been send. Client has to detect them from diff content-length vs body read
+	ph.respData.HttpBodyTime = time.Now()
+	ph.respData.HttpContentLength = resp.ContentLength
+	ph.respData.HttpContentType = resp.Header.Get("Content-Type")
+	ph.respData.HttpBodyLen = n
+	// TODO: do an op if n != content-length header. Don't bail out though - best effort is what we want for this
 }
 
 // TODO: move into main. Anything preventing that is wrong
 var opts struct {
-	// TODO: take user-specified key and cert to serve (mutex with -K)
-	// TODO: take client cert CA, print whether client cert is valid (same log print-cert uses for server certs)
 	// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
-	/* General options */
+	/* Network options */
 	ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	Status     int           `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
-	Response   string        `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
 	Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
+
+	/* Response options */
+	Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
+	Response        string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
+	PassthroughAuto bool   `short:"P" long:"passthrough-auto" description:"Proxy request to the URL in the received request"`
+	PassthroughURL  string `short:"p" long:"passthrough-url" description:"Proxy request to given URL" default:""`
 
 	/* TLS and validation */
 	Cert            string `short:"c" long:"cert" optional:"yes" description:"Path to TLS server certificate. Setting this implies serving https"`
@@ -112,13 +267,12 @@ var opts struct {
 // TODO: cobra + viper(? - go-flags is really nice)
 func main() {
 
+	/* == Parse and grok arguments == */
+
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		panic(err)
 	}
-
-	srvData := state.NewDaemonData()
-	reqData := state.NewRequestData()
 
 	if opts.Output == "auto" {
 		if isatty.IsTerminal(os.Stdout.Fd()) {
@@ -150,6 +304,8 @@ func main() {
 		panic(errors.New("bottom"))
 	}
 
+	op.Version()
+
 	if !opts.NegotiationSummary && !opts.NegotiationFull &&
 		!opts.TLSSummary && !opts.TLSFull &&
 		!opts.HeadSummary && !opts.HeadFull &&
@@ -157,65 +313,19 @@ func main() {
 		opts.HeadSummary = true
 	}
 
-	op.Version()
+	srvData := state.NewDaemonData()
+	reqData := state.NewRequestData()
+	respData := state.NewResponseData()
 
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		// TODO (where? mux?) print the proxy route to get here - all x-forwarded-for, via, etc headers. test in istio. does go transparently handle proxy protocol?
-		w.Header().Set("server", build.NameAndVersion())
-		bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
-		w.Header().Set("Content-Type", mime)
-		w.WriteHeader(opts.Status)
-		reqData.HttpResponseCode = opts.Status
-		_, err = w.Write(bytes)
-		b.CheckErr(err)
-
-		// TODO: tcp/connection op should be an option. For print-cert too.
-		op.TransportConnection(reqData)
-		// TODO: render properly, move to OP
-		for _, hop := range reqData.HttpHops {
-			proto := "http"
-			if hop.TLS {
-				proto = "https"
-			}
-			fmt.Printf("%s (%s) --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), hop.ClientAgent, proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
+	// TODO: mutex status/reply vs passtrhoughURL vs passthroughAuto - no more than 1. If none are set, use the defaults for status & response
+	var actionMux http.Handler = &responseHandler{respData}
+	if opts.PassthroughURL != "" || opts.PassthroughAuto {
+		var url *url.URL = nil
+		if opts.PassthroughURL != "" {
+			url, err = url.Parse(opts.PassthroughURL)
+			b.CheckErr(err)
 		}
-		if srvData.TlsOn {
-			if opts.NegotiationFull {
-				op.TLSNegFull(reqData, srvData)
-			} else if opts.NegotiationSummary {
-				op.TLSNegSummary(reqData)
-			}
-			if opts.TLSFull {
-				op.TLSAgreedFull(reqData, srvData)
-			} else if opts.TLSSummary {
-				// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-				op.TLSAgreedSummary(reqData, srvData)
-			}
-		}
-		if opts.HeadFull {
-			op.HeadFull(reqData)
-		} else if opts.HeadSummary {
-			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			op.HeadSummary(reqData)
-		}
-		// Print only if the method would traditionally have a body
-		if (opts.BodyFull || opts.BodySummary) && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
-			if opts.BodyFull {
-				op.BodyFull(reqData)
-			} else if opts.BodySummary {
-				op.BodySummary(reqData)
-			}
-		}
-	}
-
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/", handler)
-	loggingMux := &logMiddle{
-		b:       b,
-		next:    mux,
-		output:  op,
-		reqData: reqData,
-		srvData: srvData,
+		actionMux = &passthroughHandler{url, respData}
 	}
 
 	srvData.TlsOn = false
@@ -259,6 +369,15 @@ func main() {
 		b.CheckErr(err)
 		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
 		b.CheckErr(err)
+	}
+
+	loggingMux := &logMiddle{
+		reqData:  reqData,
+		respData: respData,
+		srvData:  srvData,
+		b:        b,
+		op:       op,
+		next:     actionMux,
 	}
 
 	srv := &http.Server{
