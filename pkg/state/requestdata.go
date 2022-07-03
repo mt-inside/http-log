@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -52,16 +53,35 @@ type RequestData struct {
 	AuthJwt    *jwt.Token
 	AuthJwtErr error
 
-	HttpContentLength   int64
-	HttpContentType     string
-	HttpRequestBody     []byte
-	HttpRequestBodyTime *time.Time // When the body finished being read
-
-	HttpResponseCode int
+	HttpBodyTime      *time.Time // When the body finished being read
+	HttpContentLength int64
+	HttpContentType   string
+	HttpBody          []byte
+	HttpBodyLen       int64
 }
 
 func NewRequestData() *RequestData {
 	return &RequestData{}
+}
+
+type ResponseData struct {
+	ProxyRequestTime         time.Time
+	PassthroughURL           *url.URL
+	PassthroughLocalAddress  net.Addr
+	PassthroughRemoteAddress net.Addr
+
+	HttpHeaderTime time.Time
+	HttpStatusCode int
+
+	HttpBodyTime      time.Time // When the body finished being read
+	HttpContentLength int64
+	HttpContentType   string
+	HttpBody          []byte
+	HttpBodyLen       int64
+}
+
+func NewResponseData() *ResponseData {
+	return &ResponseData{}
 }
 
 // Hop describes a forwarding / receiving agent and the connection into it.

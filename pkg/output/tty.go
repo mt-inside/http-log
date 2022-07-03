@@ -194,7 +194,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 // HeadSummary summarises the application-layer request header
 func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	fmt.Printf(
-		"%s HTTP/%s vhost %s | %s %s by %s => %s\n",
+		"%s HTTP/%s vhost %s | %s %s by %s\n",
 		o.s.Info(getTimestamp()),
 		o.s.Noun(d.HttpProtocolVersion),
 		o.s.Addr(d.HttpHost),
@@ -202,7 +202,6 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
 		o.s.PathElements(d.HttpPath, d.HttpQuery, d.HttpFragment),
 		o.s.Noun(d.HttpUserAgent),
-		o.s.Bright(fmt.Sprintf("%d %s", d.HttpResponseCode, http.StatusText(d.HttpResponseCode))),
 	)
 
 	if d.AuthJwt != nil {
@@ -260,13 +259,12 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc
 
-	fmt.Printf("Responding with %s\n", o.s.Noun(fmt.Sprintf("%d %s", d.HttpResponseCode, http.StatusText(d.HttpResponseCode))))
 }
 
 func (o TtyRenderer) bodyCommon(r *state.RequestData, bodyLen int) {
 	fmt.Printf(
-		"%s HTTP Body: alleged %d bytes of %s, actual length read %d\n",
-		o.s.Info(fmtTimestamp(r.HttpRequestBodyTime)),
+		"%s HTTP request body: alleged %d bytes of %s, actual length read %d\n",
+		o.s.Info(fmtTimestamp(r.HttpBodyTime)),
 		o.s.Bright(r.HttpContentLength),
 		o.s.Noun(r.HttpContentType),
 		o.s.Bright(bodyLen),
@@ -275,14 +273,14 @@ func (o TtyRenderer) bodyCommon(r *state.RequestData, bodyLen int) {
 
 // BodySummary summarises the application-layer request body
 func (o TtyRenderer) BodySummary(r *state.RequestData) {
-	bodyLen := len(r.HttpRequestBody)
+	bodyLen := len(r.HttpBody)
 
 	o.bodyCommon(r, bodyLen)
 
 	printLen := usvc.MinInt(bodyLen, 72)
 
 	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
-	fmt.Printf("%v", string(r.HttpRequestBody[0:printLen])) // assumes utf8
+	fmt.Printf("%v", string(r.HttpBody[0:printLen])) // assumes utf8
 	if bodyLen > printLen {
 		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
 	}
@@ -294,14 +292,42 @@ func (o TtyRenderer) BodySummary(r *state.RequestData) {
 
 // BodyFull prints full contents of the application-layer request body
 func (o TtyRenderer) BodyFull(r *state.RequestData) {
-	bodyLen := len(r.HttpRequestBody)
+	bodyLen := len(r.HttpBody)
 
 	o.bodyCommon(r, bodyLen)
 
 	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
-	fmt.Printf("%v", string(r.HttpRequestBody)) // assumes utf8
+	fmt.Printf("%v", string(r.HttpBody)) // assumes utf8
 
 	if bodyLen > 0 {
 		fmt.Println()
 	}
+}
+
+func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
+	if r.PassthroughURL != nil {
+		fmt.Printf(
+			"%s Proxy to %s (response is forwarded)\n",
+			o.s.Info(fmtTimestamp(&r.ProxyRequestTime)),
+			o.s.Noun(r.PassthroughURL.String()),
+		)
+		fmt.Printf(
+			"\t connection %s -> %s\n",
+			o.s.Addr(r.PassthroughLocalAddress.String()),
+			o.s.Addr(r.PassthroughRemoteAddress.String()),
+		)
+	}
+	fmt.Printf(
+		"%s Responding with %s\n",
+		o.s.Info(fmtTimestamp(&r.HttpHeaderTime)),
+		o.s.Noun(fmt.Sprintf("%d %s", r.HttpStatusCode, http.StatusText(r.HttpStatusCode))),
+	)
+	fmt.Printf(
+		"%s HTTP response body: attempting %d bytes of %s, actual length written %d\n",
+		o.s.Info(fmtTimestamp(&r.HttpBodyTime)),
+		o.s.Bright(r.HttpContentLength),
+		o.s.Noun(r.HttpContentType),
+		o.s.Bright(r.HttpBodyLen),
+	)
+	// - Don't give any more info about connection to upstream and its response; use print-cert if you wanna do that
 }

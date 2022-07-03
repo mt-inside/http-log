@@ -12,16 +12,6 @@ import (
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
-func FirstHeaderFromRequest(headers http.Header, key string) (value string) {
-	value = ""
-
-	hs := headers[http.CanonicalHeaderKey(key)]
-	if len(hs) >= 1 { // len(nil) == 0
-		value = hs[0]
-	}
-
-	return
-}
 func HeaderRepeatedOrCommaSeparated(headers http.Header, key string) []string {
 	hs := headers[http.CanonicalHeaderKey(key)]
 	if len(hs) == 1 {
@@ -43,7 +33,7 @@ func HeaderFromMap(headers map[string]interface{}, key string) (value string) {
 
 func ExtractProxies(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 
-	firstClientAgent := FirstHeaderFromRequest(r.HttpHeaders, "User-Agent")
+	firstClientAgent := r.HttpHeaders.Get("User-Agent")
 
 	lastHop := &state.Hop{
 		TLS:         s.TlsOn,
