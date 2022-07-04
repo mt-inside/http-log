@@ -304,6 +304,21 @@ func (o TtyRenderer) BodyFull(r *state.RequestData) {
 	}
 }
 
+func (o TtyRenderer) ResponseSummary(r *state.ResponseData) {
+	if r.PassthroughURL != nil {
+		fmt.Printf(
+			"%s Proxy to %s (response is forwarded)\n",
+			o.s.Info(fmtTimestamp(&r.ProxyRequestTime)),
+			o.s.Noun(r.PassthroughURL.String()),
+		)
+	}
+	fmt.Printf(
+		"%s Responding with %s\n",
+		o.s.Info(fmtTimestamp(&r.HttpHeaderTime)),
+		o.s.Noun(fmt.Sprintf("%d %s", r.HttpStatusCode, http.StatusText(r.HttpStatusCode))),
+	)
+	// - Don't give any more info about connection to upstream and its response; use print-cert if you wanna do that
+}
 func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
 	if r.PassthroughURL != nil {
 		fmt.Printf(
