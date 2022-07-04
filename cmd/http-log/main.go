@@ -53,7 +53,7 @@ type renderer interface {
 	HeadFull(d *state.RequestData)
 	BodySummary(d *state.RequestData)
 	BodyFull(d *state.RequestData)
-	// ResponseSummary(d *state.ResponseData)
+	ResponseSummary(d *state.ResponseData)
 	ResponseFull(d *state.ResponseData)
 }
 
@@ -90,8 +90,9 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (lm logMiddle) output() {
 
-	// TODO: tcp/connection op should be an option. For print-cert too.
-	lm.op.TransportConnection(lm.reqData)
+	if opts.ConnectionSummary || opts.ConnectionFull {
+		lm.op.TransportConnection(lm.reqData)
+	}
 
 	// TODO: render properly, move to OP
 	for _, hop := range lm.reqData.HttpHops {
@@ -132,9 +133,11 @@ func (lm logMiddle) output() {
 		}
 	}
 
-	// TODO: ResponseSummary
-	// TODO: both should be optional, default: no response info for replyHandler, imply response summary in proxy mode
-	lm.op.ResponseFull(lm.respData)
+	if opts.ResponseFull {
+		lm.op.ResponseFull(lm.respData)
+	} else if opts.ResponseSummary {
+		lm.op.ResponseSummary(lm.respData)
+	}
 }
 
 type responseHandler struct {
@@ -146,7 +149,7 @@ func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	/* Header */
 
 	w.Header().Set("server", build.NameAndVersion())
-	bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.Response)
+	bytes, mime := codec.BytesAndMime(opts.Status, codec.GetBody(), opts.ResponseFormat)
 	w.Header().Set("Content-Type", mime)
 	w.WriteHeader(opts.Status)
 	rh.respData.HttpHeaderTime = time.Now()
@@ -186,8 +189,10 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				dialer := &net.Dialer{}
 				conn, err := dialer.DialContext(ctx, network, address)
-				ph.respData.PassthroughLocalAddress = conn.LocalAddr()
-				ph.respData.PassthroughRemoteAddress = conn.RemoteAddr()
+				if err == nil {
+					ph.respData.PassthroughLocalAddress = conn.LocalAddr()
+					ph.respData.PassthroughRemoteAddress = conn.RemoteAddr()
+				}
 				return conn, err
 			},
 		},
@@ -208,6 +213,8 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	resp, err := client.Do(req)
 	if err != nil {
 		http.Error(w, "Error forwarding request", http.StatusBadGateway)
+		ph.respData.HttpHeaderTime = time.Now()
+		ph.respData.HttpStatusCode = http.StatusBadGateway
 		return
 	}
 	defer resp.Body.Close()
@@ -241,7 +248,7 @@ var opts struct {
 
 	/* Response options */
 	Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
-	Response        string `short:"r" long:"response" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
+	ResponseFormat  string `short:"f" long:"response-format" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
 	PassthroughAuto bool   `short:"P" long:"passthrough-auto" description:"Proxy request to the URL in the received request"`
 	PassthroughURL  string `short:"p" long:"passthrough-url" description:"Proxy request to given URL" default:""`
 
@@ -254,6 +261,8 @@ var opts struct {
 
 	/* Logging settings */
 	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
+	ConnectionSummary  bool   `short:"l" long:"connection" description:"Print summary of connection (eg TCP) information"`
+	ConnectionFull     bool   `short:"L" long:"connection-full" description:"Print all connection (eg TCP) information"`
 	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
 	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
 	TLSSummary         bool   `short:"t" long:"tls" description:"Print important agreed TLS parameters"`
@@ -262,6 +271,8 @@ var opts struct {
 	HeadFull           bool   `short:"M" long:"head-full" description:"Print all HTTP request metadata"`
 	BodySummary        bool   `short:"b" long:"body" description:"Print truncated HTTP request body"`
 	BodyFull           bool   `short:"B" long:"body-full" description:"Print full HTTP request body"`
+	ResponseSummary    bool   `short:"r" long:"response" description:"Print summary of HTTP response"`
+	ResponseFull       bool   `short:"R" long:"response-full" description:"Print full information about HTTP response"`
 }
 
 // TODO: cobra + viper(? - go-flags is really nice)
@@ -306,11 +317,17 @@ func main() {
 
 	op.Version()
 
-	if !opts.NegotiationSummary && !opts.NegotiationFull &&
+	if !opts.ConnectionSummary && !opts.ConnectionFull &&
+		!opts.NegotiationSummary && !opts.NegotiationFull &&
 		!opts.TLSSummary && !opts.TLSFull &&
 		!opts.HeadSummary && !opts.HeadFull &&
-		!opts.BodySummary && !opts.BodyFull {
+		!opts.BodySummary && !opts.BodyFull &&
+		!opts.ResponseSummary && !opts.ResponseFull {
+		opts.ConnectionSummary = true
 		opts.HeadSummary = true
+		if opts.PassthroughURL != "" || opts.PassthroughAuto {
+			opts.ResponseSummary = true
+		}
 	}
 
 	srvData := state.NewDaemonData()

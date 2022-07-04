@@ -22,38 +22,38 @@ build-lambda: lint
 	zip http-log-lambda.zip http-log-lambda
 
 run-daemon *ARGS: lint
-	go run ./cmd/http-log -t -m -b -K=ecdsa {{ARGS}}
+	go run ./cmd/http-log -K=ecdsa {{ARGS}}
 
 run-daemon-mtls-jwt *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -t -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -l -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -t -m -b -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -l -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-mtls-jwt-all-summaries *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -n -t -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -l -n -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt-all-summaries *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -n -t -m -b -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -l -n -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-mtls-jwt-all-fulls *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -N -T -M -B -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -L -N -T -M -B -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -N -T -M -B -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-proxy-mtls-jwt-all-summaries *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -n -t -m -b -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -p http://localhost:8888 -l -n -t -m -b -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-proxy-mtls-self-sign-jwt-all-summaries *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -n -t -m -b -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -p http://localhost:8888 -l -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-proxy-backend *ARGS: lint
-	go run ./cmd/http-log -a localhost:8888 -t -m -b {{ARGS}}
+	go run ./cmd/http-log -a localhost:8888 -l -t -m -b -r {{ARGS}}
 
 
 run-daemon-docker: package-docker
