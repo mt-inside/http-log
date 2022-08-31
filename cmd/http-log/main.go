@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -44,7 +43,8 @@ type renderer interface {
 	ListenInfo(d *state.DaemonData)
 
 	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
-	TransportConnection(d *state.RequestData)
+	TransportSummary(d *state.RequestData)
+	TransportFull(d *state.RequestData)
 	TLSNegSummary(d *state.RequestData)
 	TLSNegFull(r *state.RequestData, s *state.DaemonData)
 	TLSAgreedSummary(r *state.RequestData, s *state.DaemonData)
@@ -90,17 +90,10 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (lm logMiddle) output() {
 
-	if opts.ConnectionSummary || opts.ConnectionFull {
-		lm.op.TransportConnection(lm.reqData)
-	}
-
-	// TODO: render properly, move to OP
-	for _, hop := range lm.reqData.HttpHops {
-		proto := "http"
-		if hop.TLS {
-			proto = "https"
-		}
-		fmt.Printf("%s (%s) --[%s/%s]-> %s@%s (%s)\n", net.JoinHostPort(hop.ClientHost, hop.ClientPort), hop.ClientAgent, proto, hop.Version, hop.VHost, net.JoinHostPort(hop.ServerHost, hop.ServerPort), hop.ServerAgent)
+	if opts.ConnectionSummary {
+		lm.op.TransportSummary(lm.reqData)
+	} else if opts.ConnectionFull {
+		lm.op.TransportFull(lm.reqData)
 	}
 
 	if lm.srvData.TlsOn {
@@ -168,6 +161,7 @@ func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type passthroughHandler struct {
 	url      *url.URL
+	reqData  *state.RequestData
 	respData *state.ResponseData
 }
 
