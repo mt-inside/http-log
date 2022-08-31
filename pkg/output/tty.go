@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -119,8 +120,8 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 	fmt.Println()
 }
 
-// TransportConnection announces the accepted connection
-func (o TtyRenderer) TransportConnection(r *state.RequestData) {
+// TransportSummary summarises the TCP connection details
+func (o TtyRenderer) TransportSummary(r *state.RequestData) {
 	fmt.Printf(
 		"%s Connection %d %s %s -> %s\n",
 		o.s.Info(fmtTimestamp(r.TransportConnTime)),
@@ -129,6 +130,38 @@ func (o TtyRenderer) TransportConnection(r *state.RequestData) {
 		o.s.Addr(r.TransportRemoteAddress.String()),
 		o.s.Addr(r.TransportLocalAddress.String()),
 	)
+}
+
+// TransportFull prints full details on the TCP connection
+func (o TtyRenderer) TransportFull(r *state.RequestData) {
+	fmt.Printf(
+		"%s Connection %d\n",
+		o.s.Info(fmtTimestamp(r.TransportConnTime)),
+		o.s.Bright(r.TransportConnNo),
+	)
+	for i, hop := range r.HttpHops {
+		proto := "http"
+		if hop.TLS {
+			proto = "https"
+		}
+		if i == 0 {
+			fmt.Printf(
+				"%s (%s)\n",
+				o.s.Addr(net.JoinHostPort(hop.ClientHost, hop.ClientPort)),
+				o.s.Noun(hop.ClientAgent),
+			)
+		}
+		fmt.Printf(
+			"  --[%s/%s]->\n",
+			o.s.Noun(proto),
+			o.s.Noun(hop.Version),
+		)
+		fmt.Printf(
+			"%s (%s)\n",
+			o.s.Addr(net.JoinHostPort(hop.ServerHost, hop.ServerPort)),
+			o.s.Noun(hop.ServerAgent),
+		)
+	}
 }
 
 // TLSNegSummary summarises the TLS negotiation
