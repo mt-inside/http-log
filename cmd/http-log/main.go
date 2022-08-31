@@ -200,6 +200,12 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	for h := range hopHeaders {
 		req.Header.Del(h)
 	}
+	xff := req.Header.Get("x-forwarded-for")
+	if xff != "" {
+		xff += ", "
+	}
+	xff += ph.reqData.TransportRemoteAddress.String()
+	req.Header.Set("x-forwarded-for", xff)
 	// TODO: we're currently running stealth; we should actually announce ourselves with xff etc as we're active at L7
 	// see: https://gist.github.com/yowu/f7dc34bd4736a65ff28d
 	// Also: calculate the hops array after we've done all this, ie the chain we print should include us and the upstream
@@ -336,7 +342,7 @@ func main() {
 			url, err = url.Parse(opts.PassthroughURL)
 			b.CheckErr(err)
 		}
-		actionMux = &passthroughHandler{url, respData}
+		actionMux = &passthroughHandler{url, reqData, respData}
 	}
 
 	srvData.TlsOn = false
