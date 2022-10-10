@@ -1,4 +1,4 @@
-FROM golang:1.18 as build
+FROM golang:1.19 as build
 # MUST come after FROM
 ARG VERSION=unknown
 
