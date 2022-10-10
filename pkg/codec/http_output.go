@@ -23,7 +23,7 @@ func ParseListener(l net.Listener, d *state.DaemonData) {
 	}
 }
 
-//TODO; move to codec.tcp.go
+// TODO; move to codec.tcp.go
 func ParseNetConn(c net.Conn, requestNo uint, d *state.RequestData) {
 	now := time.Now()
 	d.TransportConnTime = &now
