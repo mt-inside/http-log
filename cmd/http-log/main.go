@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -375,14 +374,14 @@ func main() {
 			b.PrintErr("Can't verify TLS client certs without serving TLS")
 		}
 
-		bytes, err := ioutil.ReadFile(opts.ClientCA)
+		bytes, err := os.ReadFile(opts.ClientCA)
 		b.CheckErr(err)
 		srvData.TlsClientCA, err = codec.ParseCertificate(bytes)
 		b.CheckErr(err)
 	}
 
 	if opts.JWTValidatePath != "" {
-		bytes, err := ioutil.ReadFile(opts.JWTValidatePath)
+		bytes, err := os.ReadFile(opts.JWTValidatePath)
 		b.CheckErr(err)
 		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
 		b.CheckErr(err)
