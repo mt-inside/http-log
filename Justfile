@@ -11,7 +11,7 @@ install-tools:
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 
 lint:
-	go fmt ./...
+	goimports -local github.com/mt-inside/http-log -w .
 	go vet ./...
 	staticcheck ./...
 	golangci-lint run ./... # TODO: --enable-all
@@ -45,15 +45,17 @@ run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
-run-daemon-proxy-mtls-jwt-all-summaries *ARGS: lint
-	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -l -n -t -m -b -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-proxy-mtls-self-sign-jwt-all-summaries *ARGS: lint
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -l -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run ./cmd/http-log -p http://localhost:8888 -L -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+run-daemon-proxy-mtls-self-sign-jwt-all-fulls *ARGS: lint
+	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
+	go run ./cmd/http-log -p http://localhost:8888 -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-proxy-backend *ARGS: lint
-	go run ./cmd/http-log -a localhost:8888 -l -t -m -b -r {{ARGS}}
+	go run ./cmd/http-log -a localhost:8888 -L -t -M -b -r {{ARGS}}
+run-daemon-proxy-backend-all-fulls *ARGS: lint
+	go run ./cmd/http-log -a localhost:8888 -L -T -M -B -R {{ARGS}}
 
 
 run-daemon-docker: package-docker
