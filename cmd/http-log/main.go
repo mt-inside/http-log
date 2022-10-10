@@ -17,8 +17,6 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
 
-	"github.com/mt-inside/go-usvc"
-
 	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -307,10 +305,14 @@ func main() {
 		op = output.NewTtyRenderer(s)
 	case "json":
 		// TODO: verbosity option
-		l := usvc.GetLogger(false, 0)
-		b = output.NewLogBios(l)
-		//op = output.NewLogRenderer(l) FIXME
-		//op = output.NewTtyRenderer(s)
+		//l := usvc.GetLogger(false, 0)
+		//b = output.NewLogBios(l)
+		//op = output.NewLogRenderer(l) //FIXME
+
+		// for now
+		s := output.NewTtyStyler(aurora.NewAurora(false))
+		b = output.NewTtyBios(s)
+		op = output.NewTtyRenderer(s)
 	default:
 		panic(errors.New("bottom"))
 	}
