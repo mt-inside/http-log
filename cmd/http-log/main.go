@@ -18,6 +18,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/mt-inside/go-usvc"
+
 	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"

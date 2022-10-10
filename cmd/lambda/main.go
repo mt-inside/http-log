@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/mt-inside/go-usvc"
+
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/output"
 )

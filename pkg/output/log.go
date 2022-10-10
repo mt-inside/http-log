@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/mt-inside/go-usvc"
+
 	"github.com/mt-inside/http-log/pkg/build"
 )
 
