@@ -20,6 +20,8 @@ func GetBody() map[string]string {
 		"logged": "ok",
 		"by":     "http-log",
 		"at":     time.Now().Format(time.RFC3339Nano),
+		"host":   Hostname(),
+		"ip":     DefaultIP(),
 	}
 }
 
