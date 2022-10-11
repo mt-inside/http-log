@@ -23,3 +23,11 @@ type DaemonData struct {
 func NewDaemonData() *DaemonData {
 	return &DaemonData{}
 }
+
+func (dd *DaemonData) ServingProtocol() string {
+	if dd.TlsOn {
+		return "https"
+	} else {
+		return "http"
+	}
+}
