@@ -274,7 +274,10 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	// TODO: Truncate header values (even for Full), have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
 	// TODO: truncate to max(72, terminal width)
 	for k, vs := range d.HttpHeaders {
-		fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
+		for _, v := range vs {
+			// We deliberately "unfold" headers with multiple values, however they're sent on the wire (which the library doesn't let us see), as it's easier to read.
+			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(v))
+		}
 	}
 	if len(d.HttpHeaders) == 0 {
 		fmt.Println(o.s.Info("\t<none>"))
