@@ -216,7 +216,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	xff := req.Header.Get("x-forwarded-for")
 	if xff != "" {
-		xff += ", "
+		xff += ", " // A note on the space: this is one header value which is manipulated, not several values that have been "folded"
 	}
 	xff += ph.reqData.TransportRemoteAddress.String()
 	req.Header.Set("x-forwarded-for", xff)
