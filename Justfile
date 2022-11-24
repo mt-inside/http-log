@@ -1,10 +1,14 @@
+set dotenv-load
+
 default:
 	@just --list --unsorted --color=always
 
-REPO := "mtinside/http-log"
+DH_USER := "mtinside"
+REPO := DH_USER + "/http-log"
 TAG := `git describe --tags --abbrev`
 TAGD := `git describe --tags --abbrev --dirty`
 ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
+CGR_ARCHS := "amd64" # "amd64,aarch64,armv7"
 
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -70,3 +74,29 @@ docker-ls:
 	hub-tool tag ls --platforms {{REPO}}
 docker-inspect:
 	docker buildx imagetools inspect {{REPO}}:{{TAG}}
+
+snyk:
+	snyk test .
+	snyk container test {{REPO}}:{{TAG}}
+
+melange:
+	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
+	echo ${DH_TOKEN}
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/melange keygen
+	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
+package-cgr: melange
+	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/apko build -k melange.rsa.pub --build-arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
+	docker load < http-log.tar
+publish-cgr: melange
+	docker run --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko --debug -c \
+		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
+		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+
+sbom-show:
+	docker sbom {{REPO}}:{{TAG}}
+
+cosign-sign:
+	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
+	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
+cosign-verify:
+	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
