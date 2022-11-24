@@ -1,5 +1,5 @@
 default:
-	@just --list
+	@just --list --unsorted --color=always
 
 REPO := "mtinside/http-log"
 TAG := `git describe --tags --abbrev`
