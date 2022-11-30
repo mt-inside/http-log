@@ -84,7 +84,6 @@ snyk:
 
 melange:
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
-	echo ${DH_TOKEN}
 	docker run --rm -v "${PWD}":/work cgr.dev/chainguard/melange keygen
 	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 package-cgr: melange
