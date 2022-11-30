@@ -21,6 +21,9 @@ lint:
 	golangci-lint run ./... # TODO: --enable-all
 	go test ./...
 
+build: lint
+	CGO_ENABLED=0 go build -a -ldflags "-w -extldflags '-static' -X 'github.com/mt-inside/http-log/pkg/build.Version="{{TAGD}}"'" ./cmd/http-log
+
 build-lambda: lint
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
