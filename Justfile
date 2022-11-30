@@ -22,7 +22,9 @@ lint:
 	go test ./...
 
 build: lint
-	CGO_ENABLED=0 go build -a -ldflags "-w -extldflags '-static' -X 'github.com/mt-inside/http-log/pkg/build.Version="{{TAGD}}"'" ./cmd/http-log
+	# Use CGO here, like in the container, so this binary is pretty representative.
+	# Don't statically link though, as that's a nightmare on all possible dev machines.
+	go build -a -ldflags "-X 'github.com/mt-inside/http-log/pkg/build.Version="{{TAGD}}"'" ./cmd/http-log
 
 build-lambda: lint
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
