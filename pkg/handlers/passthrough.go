@@ -63,14 +63,46 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	/* Whither */
 
-	req.RequestURI = "" // Can't be set on client requests
+	/* A note on auto-forwarding / proxying: This mode is a bit dodgy. a) we're an open proxy, which can be dangerous. b) proxies are a /thing/, and configuring a proxy on a client has all kinds of effects. We just about support being an http "proxy" cause we just make a new request. However when a client wants to proxy to https, they use the CONNECT verb, expecting us to set up a tunnel and let them do the handshake, which we don't support. We could make the request they want, but we can't return anything to them cause they're expecting a raw TCP tunnel and to do a TLS handshake.
+	* The non-proxy mode (based on Host header, not request line) might seem a bit sus, but it's basically what any nginx reverse proxy does. And there's a bunch of reasons why a client might want us to actually make the connection on their behalf.
+	 */
 	if ph.url != nil {
+		/* Designated passthrough target */
 		req.URL = ph.url
+	} else {
+		/* Auto-passthrough mode */
+		if req.URL.Host != "" {
+			/* We're being used as a prooer proxy */
+			if req.Method != "CONNECT" {
+				/* Proxying to HTTP, works ok */
+			} else {
+				// TODO: maybe we should actually set up the tunnel - how complicated are the semantics of CONNECT? In this case, we can log the CONNECT headers and tunnel rx/tx byte counts I guess
+				http.Error(w, fmt.Sprintf("CONNECT tunneling not supported"), http.StatusBadGateway)
+				ph.respData.HttpHeaderTime = time.Now()
+				ph.respData.HttpStatusCode = http.StatusBadGateway
+				return
+				// FIXME:
+				// - run: go run ./cmd/http-log -P -R -M
+				// - and: /usr/bin/curl --proxy http://localhost:8080  https://openbsd.org
+				// - notice how our logs contain OLD lines, like the response body stuff. How does that respData object even end up getting re-used??
+				// - shit it's just getting re-used every time, don't do this. Need to think hard about handling errors, eg how to render a half-filled-out object. Detect zero-values and don't render them? Bool to mark sections of the flow as complete? Field for an error message to denote and explain an early exit (to be rendered in the log)? Ditto a warning message to be rendered (eg "don't call me like that")?
+			}
+		} else {
+			/* We're not being used as proxy. This is basically what an nginx reverse proxy would do.
+			* HTTP/1.1 says Host must be set, so use that.
+			* Note that if the user hasn't overridden it, it'll be set to whatever URL they used to call us, meaning we'll try to call ourself, and probably infinite loop?
+			* TODO: try to detect this and kill it (http-logs might be chained, so looking for our own user agent in Via won't cut it. Mint an instance UUID at startup and put in x-http-log-instance header?)
+			 */
+			req.URL.Scheme = "https" // TODO: take as an arg.
+			req.URL.Host = req.Host
+		}
 	}
 	// TODO: is it an issue that LoggMiddle's read the body already? Test with a request body from the original client
 	ph.respData.PassthroughURL = req.URL
 
 	/* Clear non-forward headers */
+
+	req.RequestURI = "" // Can't be set on client requests
 
 	for h := range hopHeaders {
 		req.Header.Del(h)
@@ -122,6 +154,9 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	ph.respData.ProxyRequestTime = time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
+		// TODO: need to print err into the log somehow - error msg field on respData?
+		// - this goes hand-in-hand with not rendering unset fields, like body time and bytes
+		// - good test-case is cold-boot http-log, then get it to forward to https with invalid cert
 		http.Error(w, fmt.Sprintf("Error forwarding request: %v", err), http.StatusBadGateway)
 		ph.respData.HttpHeaderTime = time.Now()
 		ph.respData.HttpStatusCode = http.StatusBadGateway
