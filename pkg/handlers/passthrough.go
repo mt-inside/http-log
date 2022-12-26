@@ -77,7 +77,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 				/* Proxying to HTTP, works ok */
 			} else {
 				// TODO: maybe we should actually set up the tunnel - how complicated are the semantics of CONNECT? In this case, we can log the CONNECT headers and tunnel rx/tx byte counts I guess
-				http.Error(w, fmt.Sprintf("CONNECT tunneling not supported"), http.StatusBadGateway)
+				http.Error(w, "CONNECT tunneling not supported", http.StatusBadGateway)
 				ph.respData.HttpHeaderTime = time.Now()
 				ph.respData.HttpStatusCode = http.StatusBadGateway
 				return

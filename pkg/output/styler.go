@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/logrusorgru/aurora/v3"
+
 	"github.com/mt-inside/go-usvc"
 )
 
@@ -144,19 +145,19 @@ func (s TtyStyler) YesInfo(test bool) aurora.Value {
 	return s.au.Colorize("no", s.InfoStyle)
 }
 func (s TtyStyler) YesError(err error) aurora.Value {
-	if err != nil {
-		return s.au.Colorize(err, s.FailStyle)
+	if err == nil {
+		return s.au.Colorize("yes", s.OkStyle)
 	}
-	return s.au.Colorize("yes", s.OkStyle)
+	return s.au.Colorize("no: "+err.Error(), s.FailStyle)
 }
 func (s TtyStyler) YesErrorWarning(err error, warning bool) aurora.Value {
-	if err != nil {
-		if warning {
-			return s.au.Colorize(err, s.WarnStyle)
-		}
-		return s.au.Colorize(err, s.FailStyle)
+	if err == nil {
+		return s.au.Colorize("yes", s.OkStyle)
 	}
-	return s.au.Colorize("yes", s.OkStyle)
+	if warning {
+		return s.au.Colorize("no: "+err.Error(), s.WarnStyle)
+	}
+	return s.au.Colorize("no: "+err.Error(), s.FailStyle)
 }
 
 func (s TtyStyler) OptionalString(msg string, style aurora.Color) aurora.Value {
@@ -250,9 +251,9 @@ func (s TtyStyler) certChain(peerCerts, verifiedCerts []*x509.Certificate, headC
 
 		if verifiedCerts != nil {
 			if i < len(peerCerts) && certs[i].Equal(peerCerts[i]) {
-				fmt.Printf(" (presented)")
+				fmt.Printf(" PRESENTED")
 			} else {
-				fmt.Printf(" (installed)")
+				fmt.Printf(" INSTALLED")
 			}
 		}
 		fmt.Printf(":")
@@ -286,22 +287,23 @@ func (s TtyStyler) ServingCertChainVerifyName(servingChain []*x509.Certificate, 
 		panic(errors.New("need either a name or IP to check serving cert against"))
 	}
 
-	s.certChain(
-		servingChain, nil,
-		func(head *x509.Certificate) {
-			fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
-			fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
-			fmt.Printf(
-				"\t\tSNI %s in SANs? %s (in CN? %s)\n",
-				s.au.Colorize(*name, s.AddrStyle),
-				s.YesError(head.VerifyHostname(addr)),
-				s.YesInfo(strings.EqualFold(head.Subject.CommonName, *name)),
-			)
-		},
-	)
+	s.certChain(servingChain, nil, s.getHeadCertRenderer(addr))
 }
 
-func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Certificate, name string, caCert *x509.Certificate) {
+func (s TtyStyler) getHeadCertRenderer(name string) func(*x509.Certificate) {
+	return func(head *x509.Certificate) {
+		fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
+		fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
+		fmt.Printf(
+			"\t\tSNI %s in SANs? %s (in CN? %s)\n",
+			s.au.Colorize(name, s.AddrStyle),
+			s.YesError(head.VerifyHostname(name)),
+			s.YesInfo(strings.EqualFold(head.Subject.CommonName, name)),
+		)
+	}
+}
+
+func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Certificate, name string, caCert *x509.Certificate, verbose bool) {
 	opts := x509.VerifyOptions{
 		DNSName:       name,
 		Intermediates: x509.NewCertPool(),
@@ -317,44 +319,31 @@ func (s TtyStyler) ServingCertChainVerifyNameSignature(servingChain []*x509.Cert
 	}
 
 	validChains, err := servingChain[0].Verify(opts)
+
 	if err != nil {
-		s.certChain(
-			servingChain, nil,
-			func(head *x509.Certificate) {
-				fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
-				fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
-				fmt.Printf(
-					"\t\tSNI %s in SANs? %s (in CN? %s)\n",
-					s.au.Colorize(name, s.AddrStyle),
-					s.YesError(head.VerifyHostname(name)),
-					s.YesInfo(strings.EqualFold(head.Subject.CommonName, name)),
-				)
-			},
-		)
+		// Cert isn't valid: just print it and any chain it came with
+		s.certChain(servingChain, nil, s.getHeadCertRenderer(name)) // TODO: print only the head cert in non-verbose mode (same in the other branch)
 		fmt.Println()
 	} else {
+		// Cert is valid: print any and all paths to validation
+		fmt.Println("\tValidation chain(s):")
 		for _, chain := range validChains {
-			s.certChain(
-				servingChain, chain,
-				func(head *x509.Certificate) {
-					fmt.Printf("\t\tDNS SANs %s\n", s.List(head.DNSNames, s.AddrStyle))
-					fmt.Printf("\t\tIP SANs %s\n", s.List(Slice2Strings(head.IPAddresses), s.AddrStyle))
-					fmt.Printf(
-						"\t\tSNI %s in SANs? %s (in CN? %s)\n",
-						s.au.Colorize(name, s.AddrStyle),
-						s.YesError(head.VerifyHostname(name)),
-						s.YesInfo(strings.EqualFold(head.Subject.CommonName, name)),
-					)
-				},
-			)
+			s.certChain(servingChain, chain, s.getHeadCertRenderer(name))
 			fmt.Println()
 		}
 	}
 
-	if caCert != nil {
-		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
-		fmt.Println("\tCert valid?", s.YesError(err))
+	if verbose {
+		if caCert != nil {
+			fmt.Println("\tValidating against", s.CertSummary(caCert))
+		} else {
+			fmt.Println("\tValidating against system certs")
+		}
+		fmt.Println()
 	}
+
+	fmt.Println("\tCert valid?", s.YesError(err))
+	fmt.Println()
 }
 
 // TODO should return string really
@@ -364,7 +353,7 @@ func (s TtyStyler) ClientCertChain(clientChain, verifiedCerts []*x509.Certificat
 	s.certChain(clientChain, verifiedCerts, nil)
 }
 
-func (s TtyStyler) ClientCertChainVerified(clientChain []*x509.Certificate, caCert *x509.Certificate) {
+func (s TtyStyler) ClientCertChainVerified(clientChain []*x509.Certificate, caCert *x509.Certificate, verbose bool) {
 	opts := x509.VerifyOptions{
 		Intermediates: x509.NewCertPool(),
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
@@ -379,21 +368,28 @@ func (s TtyStyler) ClientCertChainVerified(clientChain []*x509.Certificate, caCe
 		opts.Intermediates.AddCert(cert)
 	}
 
+	if verbose {
+		if caCert != nil {
+			fmt.Println("\tValidating against", s.CertSummary(caCert))
+		} else {
+			fmt.Println("\tValidating against system certs")
+		}
+	}
+
 	validChains, err := clientChain[0].Verify(opts)
+	fmt.Println("\tCert valid?", s.YesError(err))
+
 	if err != nil {
-		s.certChain(clientChain, nil, nil)
+		// Cert isn't valid: just print it and any chain it came with
+		s.certChain(clientChain, nil, nil) // TODO: print only the head cert in non-verbose mode (same in the other branch)
 		fmt.Println()
 	} else {
+		// Cert is valid: print any and all paths to validation
 		fmt.Println("\tValidation chain(s):")
 		for _, chain := range validChains {
 			s.certChain(clientChain, chain, nil)
 			fmt.Println()
 		}
-	}
-
-	if caCert != nil {
-		fmt.Println("\tValidating against", s.CertSummary(caCert)) // TODO: verbose mode only
-		fmt.Println("\tCert valid?", s.YesError(err))
 	}
 }
 

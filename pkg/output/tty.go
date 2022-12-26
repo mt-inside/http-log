@@ -221,7 +221,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 
 	if len(r.TlsClientCerts) > 0 {
 		fmt.Printf("\tclient cert received\n")
-		o.s.ClientCertChainVerified(r.TlsClientCerts, s.TlsClientCA)
+		o.s.ClientCertChainVerified(r.TlsClientCerts, s.TlsClientCA, true)
 	}
 }
 
@@ -288,6 +288,10 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		o.s.JWTSummary(d.AuthJwt)
 		fmt.Println()
 
+		// TODO: move these bits into an styler::JWTFull (which calls JWTSummary).
+		// - here, and the above JWTSummary call site should call JWTFull
+		// - leave JTWSummary public, cause print-cert uses it
+		// - print-cert should call JWTFull iff it's in head-full mode
 		sigAlgo, hashAlgo := codec.JWTSignatureInfo(d.AuthJwt)
 		fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
