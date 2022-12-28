@@ -229,6 +229,7 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 
 // TODO should return string really
 // TODO: condense this and all the below into one function, with options to
+// - print head cert details, or not, and do so as client/server cert - make the details printer funcs public and then the caller can call this with output.FooHeadRender as an arg
 // - verify signature (implied by non-nil caCert
 // - Print chain
 // - Print SAN info (the only difference between ServingCertChain and ClientCertChain ?)
