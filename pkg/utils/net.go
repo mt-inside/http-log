@@ -31,6 +31,19 @@ func SplitHostMaybePort(hostMaybePort string) (host, port string) {
 	}
 	return
 }
+func SplitHostMaybePortDefault(hostMaybePort string, defaultPort uint64) (string, uint64) {
+	var err error
+	host, port, err := net.SplitHostPort(hostMaybePort)
+	if err == nil {
+		p, err := strconv.ParseUint(port, 10, 16)
+		if err != nil {
+			panic(err)
+		}
+		return host, p
+	} else {
+		return hostMaybePort, defaultPort
+	}
+}
 
 func SplitNetAddr(addr net.Addr) (host, port string) {
 	switch a := addr.(type) {
