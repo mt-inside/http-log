@@ -221,7 +221,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 
 	if len(r.TlsClientCerts) > 0 {
 		fmt.Printf("\tclient cert received\n")
-		o.s.ClientCertChainVerified(r.TlsClientCerts, s.TlsClientCA, true)
+		o.s.VerifiedClientCertChain(r.TlsClientCerts, s.TlsClientCA, true)
 	}
 }
 
