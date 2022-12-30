@@ -26,6 +26,10 @@ func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("server", build.NameAndVersion())
 	bytes, mime := codec.BytesAndMime(rh.status, codec.GetBody(), rh.responseFormat)
 	w.Header().Set("Content-Type", mime)
+	if rh.status >= 300 && rh.status < 400 {
+		// For redirects, Location is basically (actually?) required. Send them to httpbin's redirect path, cause if we send them back to ourself it'll be a loop
+		w.Header().Set("location", "https://httpbin.org/status/302")
+	}
 	w.WriteHeader(rh.status)
 	rh.respData.HttpHeaderTime = time.Now()
 	rh.respData.HttpStatusCode = rh.status
