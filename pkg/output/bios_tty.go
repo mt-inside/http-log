@@ -14,9 +14,9 @@ type TtyBios struct {
 	log logr.Logger
 }
 
-func NewTtyBios(s TtyStyler) TtyBios {
+func NewTtyBios(s TtyStyler, verbosity int) TtyBios {
 	// TODO: take verbosity level arg, use here
-	return TtyBios{s, usvc.GetLogger(false, 0).V(1)}
+	return TtyBios{s, usvc.GetLogger(false, verbosity).V(1)}
 }
 
 func (b TtyBios) Banner(msg string) {
