@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+
 	"github.com/mt-inside/go-usvc"
 )
 
@@ -24,14 +25,17 @@ func (b TtyBios) Banner(msg string) {
 	fmt.Println()
 }
 
-// Useing a logger is a nice way to get nice output for now. In future it could pretty print
+// Using a logger is a nice way to get nice output for now. In future it could pretty print
 func (b TtyBios) Trace(msg string, keysAndValues ...interface{}) {
 	b.log.Info(msg, keysAndValues...)
+}
+func (b TtyBios) TraceWithName(name, msg string, keysAndValues ...interface{}) {
+	b.log.WithName(name).Info(msg, keysAndValues...)
 }
 
 // TODO to stderr
 func (b TtyBios) GetLogger() logr.Logger {
-	return b.log.V(1)
+	return b.log
 }
 
 func (b TtyBios) PrintInfo(msg string) {
