@@ -239,7 +239,6 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) {
 // - Print SAN info (the only difference between ServingCertChain and ClientCertChain ?)
 // - Verify an addr (parse as either ip or name) against the SANs & CN
 // TODO: builder pattern (and verifiedCertChain)
-// TODO: make this private, public wrapper that doesn't take verifiedChains (rename arg)
 func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb func(cert *x509.Certificate)) {
 
 	head := chain[0]
