@@ -278,6 +278,11 @@ func (s TtyStyler) ClientCertChain(chain []*x509.Certificate) {
 
 func (s TtyStyler) VerifiedCertChain(chain []*x509.Certificate, caCert *x509.Certificate, validateAddr string, validateUsage []x509.ExtKeyUsage, headCb func(cert *x509.Certificate), verbose bool) {
 
+	if len(chain) == 0 {
+		fmt.Println("Cert chain empty")
+		return
+	}
+
 	head := chain[0]
 
 	opts := x509.VerifyOptions{
