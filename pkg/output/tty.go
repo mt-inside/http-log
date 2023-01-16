@@ -273,6 +273,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
 	// TODO: Truncate header values (even for Full), have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
 	// TODO: truncate to max(72, terminal width)
+	// TODO: when all that is done, share with header printing in print-cert::responseData.Print
 	for k, vs := range d.HttpHeaders {
 		for _, v := range vs {
 			// We deliberately "unfold" headers with multiple values, however they're sent on the wire (which the library doesn't let us see), as it's easier to read.
