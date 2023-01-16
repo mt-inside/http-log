@@ -329,7 +329,7 @@ func (s TtyStyler) VerifiedCertChain(chain []*x509.Certificate, caCert *x509.Cer
 			validateAddr = "[" + ip.String() + "]"
 		}
 		fmt.Printf(
-			"\tName valid, ie SNI %s in SANs? %s; in CN? %s\n",
+			"\tRequested SNI (%s) in SANs? %s; in CN? %s\n",
 			s.au.Colorize(validateAddr, s.AddrStyle),
 			s.YesError(head.VerifyHostname(validateAddr)),
 			s.YesInfo(strings.EqualFold(head.Subject.CommonName, validateAddr)),
