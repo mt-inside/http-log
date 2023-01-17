@@ -61,6 +61,7 @@ import (
 * - maybe a logStyler which can eg have YesNo; timefmt; take a string list, limit len, aggregate or whatever for passing to logr
  */
 
+// TODO: use styler's timestamp functions
 func getTimestamp() string {
 	return time.Now().Format("15:04:05")
 }

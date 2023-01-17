@@ -113,6 +113,28 @@ func (s TtyStyler) PathElements(path, query, fragment string) string {
 	return b.String()
 }
 
+type TimestampType uint32
+
+const (
+	TimestampNone TimestampType = iota
+	TimestampAbsolute
+	TimestampRelative
+)
+
+func (s TtyStyler) Timestamp(t time.Time, tsType TimestampType, start *time.Time) aurora.Value {
+	switch tsType {
+	case TimestampNone:
+		return s.Info("")
+	case TimestampAbsolute:
+		return s.Info(t.Format("15:04:05") + " ")
+	case TimestampRelative:
+		d := t.Sub(*start)
+		return s.Info(d.String() + " ") // TODO: print as time-like instead?
+	default:
+		panic("bottom")
+	}
+}
+
 func (s TtyStyler) Time(t time.Time, start bool) aurora.Value {
 	if start {
 		if t.After(time.Now()) {
