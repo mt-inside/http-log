@@ -315,13 +315,14 @@ func main() {
 			// Note: ctx has a bunch of info under context-key "http-server"
 
 			requestNo++ // Think everything is single-threaded...
+			b.TraceWithName("tcp", "Accepting connection", "number", requestNo)
 			codec.ParseNetConn(c, requestNo, reqData)
 
 			return ctx
 		},
 		// Called when an http server connection changes state
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			b.Trace("HTTP server connection state change", "State", cs)
+			b.TraceWithName("http", "Connection state change", "state", cs)
 		},
 	}
 
@@ -330,28 +331,33 @@ func main() {
 			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				b.Trace("TLS ClientHello received")
+				b.TraceWithName("tls", "ClientHello received, proposing TLS config")
 
 				codec.ParseTlsClientHello(hi, reqData)
 
+				// TODO: is TLSConfig how we stop it suggesting ciphers/whatever so old that Go's own client rejects them?
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				b.TraceWithName("tls", "Asked for serving cert")
 				if srvData.TlsServingSelfSign {
+					b.TraceWithName("tls", "Generating self-signed serving cert")
 					cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
 					if err == nil {
 						reqData.TlsNegServerCert = cert
 					}
 					return cert, err
 				}
+
+				b.TraceWithName("tls", "Returning configured serving cert")
 				return srvData.TlsServingCertPair, nil
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				b.Trace("TLS built-in cert verification finished")
+				b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
 				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				b.Trace("TLS: all cert verification finished")
+				b.TraceWithName("tls", "Connection parameter validation")
 
 				codec.ParseTlsConnectionState(&cs, reqData)
 
@@ -359,9 +365,9 @@ func main() {
 			},
 		}
 		b.CheckErr(srv.ListenAndServeTLS("", ""))
-		b.Trace("Shutting down")
+		b.Trace("Server shutting down")
 	} else {
 		b.CheckErr(srv.ListenAndServe())
-		b.Trace("Shutting down")
+		b.Trace("Server shutting down")
 	}
 }
