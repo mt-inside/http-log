@@ -191,11 +191,12 @@ func main() {
 	switch opts.Output {
 	case "text":
 		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
-		b = output.NewTtyBios(s, 0)
+		b = output.NewTtyBios(s, 10)
 		op = output.NewTtyRenderer(s)
 	case "pretty":
 		s := output.NewTtyStyler(aurora.NewAurora(true)) // color
-		b = output.NewTtyBios(s, 0)
+		// TODO: verbosity option
+		b = output.NewTtyBios(s, 10)
 		op = output.NewTtyRenderer(s)
 	case "json":
 		// TODO: verbosity option
