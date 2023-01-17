@@ -10,7 +10,7 @@ import (
 )
 
 type responseHandler struct {
-	status         int    // TODO: is a type alias for this?
+	status         int    // stdlib has no special type for this
 	responseFormat string // TODO: should be handled internally as an enum
 	respData       *state.ResponseData
 }
