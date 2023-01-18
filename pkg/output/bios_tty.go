@@ -62,7 +62,7 @@ func (b TtyBios) CheckWarn(err error) bool {
 
 func (b TtyBios) PrintErr(msg string) {
 	fmt.Printf("%s %s\n", b.s.Fail("Error"), msg)
-	//panic(err) - for backtraces
+	//panic(errors.New("backtrace"))
 	os.Exit(1)
 }
 func (b TtyBios) CheckErr(err error) {

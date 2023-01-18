@@ -103,7 +103,7 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 			)
 		} else {
 			fmt.Printf("\tTLS serving cert:\n")
-			o.s.ServingCertChain(codec.ChainFromCertificate(s.TlsServingCertPair))
+			fmt.Print(o.s.ServingCertChain(codec.ChainFromCertificate(s.TlsServingCertPair)))
 		}
 		if s.TlsClientCA != nil {
 			fmt.Printf(
@@ -125,7 +125,7 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 // TransportSummary summarises the TCP connection details
 func (o TtyRenderer) TransportSummary(r *state.RequestData) {
 	fmt.Printf(
-		"%s Connection %d %s %s -> %s\n",
+		"%s Connection %s %s %s -> %s\n",
 		o.s.Info(fmtTimestamp(r.TransportConnTime)),
 		o.s.Bright(r.TransportConnNo),
 		o.s.Noun(r.TransportRemoteAddress.Network()),
@@ -137,7 +137,7 @@ func (o TtyRenderer) TransportSummary(r *state.RequestData) {
 // TransportFull prints full details on the TCP connection
 func (o TtyRenderer) TransportFull(r *state.RequestData) {
 	fmt.Printf(
-		"%s Connection %d\n",
+		"%s Connection %s\n",
 		o.s.Info(fmtTimestamp(r.TransportConnTime)),
 		o.s.Bright(r.TransportConnNo),
 	)
@@ -181,16 +181,15 @@ func (o TtyRenderer) TLSNegFull(r *state.RequestData, s *state.DaemonData) {
 	o.TLSNegSummary(r)
 
 	if s.TlsServingSelfSign {
-		fmt.Printf("\tpresenting serving cert:\n")
-		o.s.ServingCertChain(codec.ChainFromCertificate(r.TlsNegServerCert))
+		fmt.Printf("\tpresenting serving cert: %s\n", o.s.ServingCertChain(codec.ChainFromCertificate(r.TlsNegServerCert)))
 	}
 
-	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(r.TlsNegVersions), o.s.NounStyle))
+	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(r.TlsNegVersions), NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(r.TlsNegSignatureSchemes), o.s.NounStyle))
-	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(r.TlsNegCurves), o.s.NounStyle))
-	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(r.TlsNegCipherSuites), o.s.NounStyle))
-	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(r.TlsNegALPN, o.s.NounStyle))
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(r.TlsNegSignatureSchemes), NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(r.TlsNegCurves), NounStyle))
+	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(r.TlsNegCipherSuites), NounStyle))
+	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(r.TlsNegALPN, NounStyle))
 }
 
 func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
@@ -222,7 +221,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 
 	if len(r.TlsClientCerts) > 0 {
 		fmt.Printf("\tclient cert received\n")
-		o.s.VerifiedClientCertChain(r.TlsClientCerts, s.TlsClientCA, true)
+		fmt.Print(o.s.VerifiedClientCertChain(r.TlsClientCerts, s.TlsClientCA, true))
 	}
 }
 
@@ -240,10 +239,11 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	)
 
 	if d.AuthJwt != nil {
-		fmt.Printf("%s ", o.s.Info(getTimestamp()))
-		o.s.JWTSummary(d.AuthJwt)
-		fmt.Printf(" [valid? %s]", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
-		fmt.Println()
+		fmt.Printf("%s %s [valid? %s]\n",
+			o.s.Info(getTimestamp()),
+			o.s.JWTSummary(d.AuthJwt),
+			o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})),
+		)
 	}
 }
 
@@ -286,9 +286,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	}
 
 	if d.AuthJwt != nil {
-		fmt.Printf("%s ", o.s.Info(getTimestamp()))
-		o.s.JWTSummary(d.AuthJwt)
-		fmt.Println()
+		fmt.Printf("%s %s\n", o.s.Info(getTimestamp()), o.s.JWTSummary(d.AuthJwt))
 
 		// TODO: move these bits into an styler::JWTFull (which calls JWTSummary).
 		// - here, and the above JWTSummary call site should call JWTFull
@@ -297,7 +295,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		sigAlgo, hashAlgo := codec.JWTSignatureInfo(d.AuthJwt)
 		fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
-		fmt.Println("\tvalid?", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
+		fmt.Printf("\tvalid? %s\n", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
 	}
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc
@@ -306,7 +304,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 func (o TtyRenderer) bodyCommon(r *state.RequestData, bodyLen int) {
 	fmt.Printf(
-		"%s HTTP request body: alleged %d bytes of %s, actual length read %d\n",
+		"%s HTTP request body: alleged %s bytes of %s, actual length read %s\n",
 		o.s.Info(fmtTimestamp(r.HttpBodyTime)),
 		o.s.Bright(r.HttpContentLength),
 		o.s.Noun(r.HttpContentType),
@@ -381,7 +379,7 @@ func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
 		o.s.Noun(fmt.Sprintf("%d %s", r.HttpStatusCode, http.StatusText(r.HttpStatusCode))),
 	)
 	fmt.Printf(
-		"%s HTTP response body: attempting %d bytes of %s, actual length written %d\n",
+		"%s HTTP response body: attempting %s bytes of %s, actual length written %s\n",
 		o.s.Info(fmtTimestamp(&r.HttpBodyTime)),
 		o.s.Bright(r.HttpContentLength),
 		o.s.Noun(r.HttpContentType),

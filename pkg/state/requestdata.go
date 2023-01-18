@@ -15,7 +15,7 @@ import (
 // TODO: However the reason it splits everything out like this is to provide compatibility with other server frameworks like lambda, CF workers, etc. This might prove to be a step too far to be useful, and maybe they all wanna have different outputters (in cmd/internal?) just sharing the stylers/biosen
 type RequestData struct {
 	TransportConnTime      *time.Time
-	TransportConnNo        uint // TODO. Where should this state be held?
+	TransportConnNo        uint64 // TODO. Where should this state be held?
 	TransportRemoteAddress net.Addr
 	TransportLocalAddress  net.Addr // Note that this is not the same as the Server's TcpListenAddress, as that might be eg 0.0.0.0
 
