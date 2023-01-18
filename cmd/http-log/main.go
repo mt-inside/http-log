@@ -55,7 +55,7 @@ type renderer interface {
 	ResponseFull(d *state.ResponseData)
 }
 
-var requestNo uint
+var requestNo uint64
 
 type logMiddle struct {
 	b        output.Bios
