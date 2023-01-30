@@ -19,12 +19,6 @@ func NewTtyBios(s TtyStyler, verbosity int) TtyBios {
 	return TtyBios{s, usvc.GetLogger(false, verbosity).V(1)}
 }
 
-func (b TtyBios) Banner(msg string) {
-	fmt.Println()
-	fmt.Println(b.s.Bright(fmt.Sprintf("== %s ==", msg)))
-	fmt.Println()
-}
-
 // Using a logger is a nice way to get nice output for now. In future it could pretty print
 func (b TtyBios) Trace(msg string, keysAndValues ...interface{}) {
 	b.log.Info(msg, keysAndValues...)
@@ -33,24 +27,17 @@ func (b TtyBios) TraceWithName(name, msg string, keysAndValues ...interface{}) {
 	b.log.WithName(name).Info(msg, keysAndValues...)
 }
 
-// TODO to stderr
+// TODO to stderr. Also anti-pattern surely?
 func (b TtyBios) GetLogger() logr.Logger {
 	return b.log
 }
 
-func (b TtyBios) PrintInfo(msg string) {
-	fmt.Printf("%s %s\n", b.s.Info("Info"), msg)
-}
 func (b TtyBios) CheckInfo(err error) bool {
 	if err != nil {
 		b.PrintInfo(err.Error())
 		return false
 	}
 	return true
-}
-
-func (b TtyBios) PrintWarn(msg string) {
-	fmt.Printf("%s %s\n", b.s.Warn("Warning"), msg)
 }
 func (b TtyBios) CheckWarn(err error) bool {
 	if err != nil {
@@ -59,22 +46,23 @@ func (b TtyBios) CheckWarn(err error) bool {
 	}
 	return true
 }
-
-func (b TtyBios) PrintErr(msg string) {
-	fmt.Printf("%s %s\n", b.s.Fail("Error"), msg)
-	//panic(errors.New("backtrace"))
-	os.Exit(1)
-}
 func (b TtyBios) CheckErr(err error) {
 	if err != nil {
 		b.PrintErr(err.Error())
 	}
 }
 
-func (b TtyBios) CheckOk(ok bool) {
-	if !ok {
-		//panic(errors.New("Not OK!"))
-		fmt.Printf("%s Not OK!\n", b.s.Fail("Error"))
-		os.Exit(1)
-	}
+func (b TtyBios) PrintOk(msg string) {
+	fmt.Print(b.s.RenderOk(msg))
+}
+func (b TtyBios) PrintInfo(msg string) {
+	fmt.Print(b.s.RenderInfo(msg))
+}
+func (b TtyBios) PrintWarn(msg string) {
+	fmt.Print(b.s.RenderWarn(msg))
+}
+func (b TtyBios) PrintErr(msg string) {
+	fmt.Print(b.s.RenderErr(msg))
+	//panic(errors.New("backtrace"))
+	os.Exit(1)
 }

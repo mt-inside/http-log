@@ -88,6 +88,23 @@ func (s TtyStyler) Bright(v any) string {
 	return s.au.Colorize(v, BrightStyle).String()
 }
 
+func (s TtyStyler) RenderOk(msg string) string {
+	return fmt.Sprintf("%s %s", s.Ok("Ok"), msg)
+}
+func (s TtyStyler) RenderInfo(msg string) string {
+	return fmt.Sprintf("%s %s", s.Info("Info"), msg)
+}
+func (s TtyStyler) RenderWarn(msg string) string {
+	return fmt.Sprintf("%s %s", s.Warn("Warning"), msg)
+}
+func (s TtyStyler) RenderErr(msg string) string {
+	return fmt.Sprintf("%s %s", s.Fail("Error"), msg)
+}
+
+func (s TtyStyler) Banner(msg string) string {
+	return fmt.Sprintf("\n== %s ==\n\n", s.Bright(msg))
+}
+
 func (s TtyStyler) UrlPath(u *url.URL) string {
 	var b strings.Builder
 
@@ -262,10 +279,10 @@ func (s TtyStyler) Issuer(cert *x509.Certificate) string {
 }
 
 func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
-	var b strings.Builder
+	var b IndentingBuilder
 
-	fmt.Fprintf(&b, "\t\tDNS SANs %s\n", s.List(cert.DNSNames, AddrStyle))
-	fmt.Fprintf(&b, "\t\tIP SANs %s\n", s.List(Slice2Strings(cert.IPAddresses), AddrStyle))
+	b.Linef("DNS SANs %s", s.List(cert.DNSNames, AddrStyle))
+	b.Linef("IP SANs %s", s.List(Slice2Strings(cert.IPAddresses), AddrStyle))
 
 	return b.String()
 }
@@ -278,12 +295,14 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 // - Verify an addr (parse as either ip or name) against the SANs & CN
 // TODO: builder pattern (and verifiedCertChain)
 func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb func(cert *x509.Certificate) string) string {
-	var b strings.Builder
+	var b IndentingBuilder
 
 	head := chain[0]
-	fmt.Fprintf(&b, "\t0: %s\n", s.CertSummary(head))
+	b.Linef("0: %s", s.CertSummary(head))
 	if headCb != nil {
-		b.WriteString(headCb(head))
+		b.Indent()
+		b.Block(headCb(head))
+		b.Dedent()
 	}
 
 	certs := verifiedCerts
@@ -292,20 +311,22 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb fu
 	}
 
 	for i := 1; i < len(certs); i++ {
-		fmt.Fprintf(&b, "\t%d: ", i)
+		b.Tabs()
+		b.Printf("%d: ", i)
 
 		if verifiedCerts != nil {
 			if i < len(chain) && certs[i].Equal(chain[i]) {
-				fmt.Fprintf(&b, "PRESENTED")
+				b.Print("PRESENTED")
 			} else {
-				fmt.Fprintf(&b, "INSTALLED")
+				b.Print("INSTALLED")
 			}
 		}
 
-		fmt.Fprintf(&b, " %s\n", s.CertSummary(certs[i]))
+		b.Printf(" %s", s.CertSummary(certs[i]))
+		b.NewLine()
 	}
 
-	fmt.Fprintf(&b, "\t%d: %s\n", len(certs), s.Issuer(certs[len(certs)-1]))
+	b.Linef("%d: %s", len(certs), s.Issuer(certs[len(certs)-1]))
 
 	return b.String()
 }
@@ -325,10 +346,10 @@ func (s TtyStyler) VerifiedCertChain(
 	headCb func(cert *x509.Certificate) string,
 	verbose bool,
 ) string {
-	var b strings.Builder
+	var b IndentingBuilder
 
 	if len(chain) == 0 {
-		b.WriteString("Cert chain empty")
+		b.Line("Cert chain empty")
 		return b.String()
 	}
 
@@ -348,47 +369,49 @@ func (s TtyStyler) VerifiedCertChain(
 		opts.Intermediates.AddCert(cert)
 	}
 
+	if verbose {
+		if caCert != nil {
+			b.Linef("Validating against: %s", s.CertSummary(caCert))
+		} else {
+			b.Line("Validating against system certs")
+		}
+		b.NewLine()
+	}
+
 	validChains, err := chain[0].Verify(opts)
 
 	if err != nil {
 		// Cert isn't valid: just print it and any chain it came with
-		b.WriteString(s.certChain(chain, nil, headCb)) // TODO: print only the head cert in non-verbose mode (same in the other branch)
-		b.WriteString("\n")
+		b.Block(s.certChain(chain, nil, headCb)) // TODO: print only the head cert in non-verbose mode (same in the other branch)
+		b.NewLine()
 	} else {
 		// Cert is valid: print any and all paths to validation
 		// TODO: something (styler) needs an "indent writer" that targets a Builder and has the indent/dedent functions. Generalises over what bios does (bios should defer to that and actually output)
 		// - bios doesn't actually need it then; the binaries can just use it from styler and fmt.Print the result, bios can do the same
 		// - NewLine method too
-		fmt.Println("\tValidation chain(s):")
+		b.Line("Validation chain(s):")
+		b.Indent()
 		for _, chain := range validChains {
-			b.WriteString(s.certChain(chain, chain, headCb))
-			b.WriteString("\n")
+			b.Block(s.certChain(chain, chain, headCb))
+			b.NewLine()
 		}
+		b.Dedent()
 	}
 
-	if verbose {
-		if caCert != nil {
-			fmt.Fprintf(&b, "\tValidating against: %s", s.CertSummary(caCert))
-		} else {
-			b.WriteString("\tValidating against system certs")
-		}
-		b.WriteString("\n")
-	}
-	fmt.Fprintf(&b, "\tCert valid? %s", s.YesError(err))
+	b.Linef("Cert valid? %s", s.YesError(err))
 
 	if validateAddr != "" {
 		if ip := net.ParseIP(validateAddr); ip != nil {
 			validateAddr = "[" + ip.String() + "]"
 		}
-		fmt.Fprintf(&b,
-			"\tRequested SNI (%s) in SANs? %s; in CN? %s\n",
+		b.Linef("Requested SNI (%s) in SANs? %s; in CN? %s",
 			s.au.Colorize(validateAddr, AddrStyle),
 			s.YesError(head.VerifyHostname(validateAddr)),
 			s.YesInfo(strings.EqualFold(head.Subject.CommonName, validateAddr)),
 		)
 	}
 
-	b.WriteString("\n")
+	b.NewLine()
 
 	return b.String()
 }
