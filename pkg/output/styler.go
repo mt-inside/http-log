@@ -160,7 +160,7 @@ const (
 func (s TtyStyler) Timestamp(t time.Time, tsType TimestampType, start *time.Time) string {
 	switch tsType {
 	case TimestampNone:
-		return s.Info("")
+		return ""
 	case TimestampAbsolute:
 		return s.Info(t.Format("15:04:05") + " ")
 	case TimestampRelative:
