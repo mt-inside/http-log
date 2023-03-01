@@ -14,6 +14,8 @@ import (
 	"github.com/mt-inside/http-log/pkg/state"
 )
 
+// TODO: can we rebase this onto https://pkg.go.dev/net/http/httputil@master#ReverseProxy
+// - go 1.20 will add a new Rewrite hook with even more power
 var hopHeaders = map[string]bool{
 	"Connection":          true,
 	"Keep-Alive":          true,
