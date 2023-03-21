@@ -10,15 +10,16 @@ package:
 
 environment:
   contents:
-    keyring:
-      - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
     repositories:
       # Since we build in Wolfi, we seem to need to _run_ in it too (ie use Wolfi in apko)
       # Note that we have to restrict archs to amd64 atm, this isn't a melange or apko thing, it's a wolfi thing: they just don't have APKs in their repo for arm64 (ie https://packages.wolfi.dev/os/aarch64/APKINDEX.tar.gz doesn't exist)
-      - https://packages.wolfi.dev/os
+      - https://dl-cdn.alpinelinux.org/alpine/edge/main
+      - https://dl-cdn.alpinelinux.org/alpine/edge/community
     packages:
-      - wolfi-base
+      - alpine-baselayout-data
+      - ca-certificates-bundle
       - build-base
+      - busybox
       - go
 
 pipeline:
