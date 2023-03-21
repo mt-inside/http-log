@@ -1,6 +1,6 @@
 module github.com/mt-inside/http-log
 
-go 1.19
+go 1.20
 
 require (
 	github.com/aws/aws-lambda-go v1.37.0
@@ -10,7 +10,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mattn/go-isatty v0.0.17
-	github.com/mt-inside/go-usvc v0.0.6
+	github.com/mt-inside/go-usvc v0.0.7
 )
 
 require (
