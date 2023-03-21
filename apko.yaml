@@ -3,11 +3,11 @@ contents:
     - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
   repositories:
     - https://packages.wolfi.dev/os
-    - '@local /work/packages'
+    - /work/packages
   packages:
     #- wolfi-base - we statically link http-log, so we don't need this for libc
     - ca-certificates-bundle
-    - 'http-log@local'
+    - http-log
 
 accounts:
   groups:

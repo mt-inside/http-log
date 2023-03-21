@@ -86,15 +86,19 @@ snyk:
 
 melange:
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
-	docker run --pull always --rm -v "${PWD}":/work cgr.dev/chainguard/melange:latest keygen
-	docker run --privileged --rm -v "${PWD}":/work cgr.dev/chainguard/melange:latest build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
+	docker run --pull always --rm -v "${PWD}":/work distroless.dev/melange:latest keygen
+	docker run --pull always --privileged --rm -v "${PWD}":/work distroless.dev/melange:latest build --arch {{CGR_ARCHS}} --repository-append packages --signing-key melange.rsa melange.yaml
 package-cgr: #melange
-	docker run --pull always --rm -v "${PWD}":/work cgr.dev/chainguard/apko:latest build -k melange.rsa.pub --build-arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
+	docker run --pull always --rm -v "${PWD}":/work distroless.dev/apko:latest build -k melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
 	docker load < http-log.tar
 publish-cgr: #melange
-	docker run --pull always --rm -v "${PWD}":/work --entrypoint sh cgr.dev/chainguard/apko:latest -c \
+	docker run --pull always --rm -v "${PWD}":/work --entrypoint sh distroless.dev/apko:latest -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
 		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+publish-cgr-no-certs: #melange
+	docker run --pull always --rm -v "${PWD}":/work --entrypoint sh distroless.dev/apko:latest -c \
+		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
+		apko publish apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs -k melange.rsa.pub --arch {{CGR_ARCHS}}'
 
 sbom-show:
 	docker sbom {{REPO}}:{{TAG}}
