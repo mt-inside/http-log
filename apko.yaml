@@ -5,7 +5,7 @@ contents:
     - https://packages.wolfi.dev/os
     - /work/packages
   packages:
-    #- wolfi-base - we statically link http-log, so we don't need this for libc
+    - wolfi-baselayout
     - ca-certificates-bundle
     - http-log
 
