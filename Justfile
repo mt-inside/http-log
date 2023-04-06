@@ -13,6 +13,7 @@ CGR_ARCHS := "aarch64" # "amd64,aarch64,armv7"
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 
 lint:
 	goimports -local github.com/mt-inside/http-log -w .
