@@ -94,16 +94,16 @@ melange:
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key /work/melange.rsa melange.yaml
 package-cgr: #melange
-	{{APKO}} build -k melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
+	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
 	docker load < http-log.tar
 publish-cgr: #melange
 	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko.yaml {{REPO}}:{{TAG}} -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+		apko publish apko.yaml {{REPO}}:{{TAG}} --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}}'
 publish-cgr-no-certs: #melange
 	{{APKO_SH}} -c \
 		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs -k melange.rsa.pub --arch {{CGR_ARCHS}}'
+		apko publish apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}}'
 
 sbom-show:
 	docker sbom {{REPO}}:{{TAG}}
