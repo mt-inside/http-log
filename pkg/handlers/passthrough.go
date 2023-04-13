@@ -68,16 +68,22 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	/* A note on auto-forwarding / proxying: This mode is a bit dodgy. a) we're an open proxy, which can be dangerous. b) proxies are a /thing/, and configuring a proxy on a client has all kinds of effects. We just about support being an http "proxy" cause we just make a new request. However when a client wants to proxy to https, they use the CONNECT verb, expecting us to set up a tunnel and let them do the handshake, which we don't support. We could make the request they want, but we can't return anything to them cause they're expecting a raw TCP tunnel and to do a TLS handshake.
 	* The non-proxy mode (based on Host header, not request line) might seem a bit sus, but it's basically what any nginx reverse proxy does. And there's a bunch of reasons why a client might want us to actually make the connection on their behalf.
 	 */
+
+	/* A note on usage: We give the user maximum flexibility, so in the case of designated target, we *don't* set the request's Host or SNI to that target (eg you could passthrough to an IP, and the user could set Host per request). This means that in the common case, you have to set the Host header on each request, as well as giving it as passthrough target */
+
 	if ph.url != nil {
 		/* Designated passthrough target */
 		req.URL = ph.url
 	} else {
 		/* Auto-passthrough mode */
-		if req.URL.Host != "" {
-			/* We're being used as a prooer proxy */
+		if req.URL.Host != "" { // HTTP request line has a host in it (not looking at Host header)
+			/* We're being used as a proper proxy */
 			if req.Method != "CONNECT" {
 				/* Proxying to HTTP, works ok */
+				/* HTTP_PROXY set; Req URL http://... */
 			} else {
+				/* Proxying to HTTPS, doesn't work */
+				/* HTTP_PROXY set; Req URL httpS://... */
 				// TODO: maybe we should actually set up the tunnel - how complicated are the semantics of CONNECT? In this case, we can log the CONNECT headers and tunnel rx/tx byte counts I guess
 				http.Error(w, "CONNECT tunneling not supported", http.StatusBadGateway)
 				ph.respData.HttpHeaderTime = time.Now()
@@ -90,8 +96,9 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 				// - shit it's just getting re-used every time, don't do this. Need to think hard about handling errors, eg how to render a half-filled-out object. Detect zero-values and don't render them? Bool to mark sections of the flow as complete? Field for an error message to denote and explain an early exit (to be rendered in the log)? Ditto a warning message to be rendered (eg "don't call me like that")?
 			}
 		} else {
-			/* We're not being used as proxy. This is basically what an nginx reverse proxy would do.
-			* HTTP/1.1 says Host must be set, so use that.
+			/* We're not being used as "proper" proxy. This is basically what an nginx reverse proxy would do. */
+			/* HTTP_PROXY UNset */
+			/* HTTP/1.1 says Host must be set, so use that.
 			* Note that if the user hasn't overridden it, it'll be set to whatever URL they used to call us, meaning we'll try to call ourself, and probably infinite loop?
 			* TODO: try to detect this and kill it (http-logs might be chained, so looking for our own user agent in Via won't cut it. Mint an instance UUID at startup and put in x-http-log-instance header?)
 			 */

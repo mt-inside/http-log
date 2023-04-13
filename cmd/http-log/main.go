@@ -57,6 +57,7 @@ type renderer interface {
 
 var requestNo uint64
 
+// TODO: move out of this file
 type logMiddle struct {
 	b        output.Bios
 	op       renderer
