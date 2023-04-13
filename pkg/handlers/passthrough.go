@@ -102,7 +102,11 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			* Note that if the user hasn't overridden it, it'll be set to whatever URL they used to call us, meaning we'll try to call ourself, and probably infinite loop?
 			* TODO: try to detect this and kill it (http-logs might be chained, so looking for our own user agent in Via won't cut it. Mint an instance UUID at startup and put in x-http-log-instance header?)
 			 */
-			req.URL.Scheme = "https" // TODO: take as an arg.
+			req.URL.Scheme = "https"
+			if req.Header.Get("x-scheme") != "" {
+				req.URL.Scheme = req.Header.Get("x-scheme")
+			}
+			// TODO: support connecting to custom ports too (x-port)
 			req.URL.Host = req.Host
 		}
 	}
