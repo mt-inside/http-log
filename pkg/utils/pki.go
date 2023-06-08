@@ -197,7 +197,10 @@ func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls
 		Subject: pkix.Name{
 			CommonName: "http-log",
 		},
-		DNSNames:     []string{dnsName},
+		DNSNames: []string{dnsName},
+		// IPAddresses:    []net.IP{net.IPv4(1, 2, 3, 4)},
+		// URIs: []*url.URL{&url.URL{Scheme: "spiffe", Host: "trust.domain", Path: "/ns/foo/sa/bar"}},
+		// EmailAddresses: []string{"root@cia.gov"},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(0, 0, 1),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},

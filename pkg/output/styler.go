@@ -13,6 +13,7 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 
 	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 type TtyStyler struct {
@@ -103,6 +104,26 @@ func (s TtyStyler) RenderErr(msg string) string {
 
 func (s TtyStyler) Banner(msg string) string {
 	return fmt.Sprintf("\n== %s ==\n\n", s.Bright(msg))
+}
+
+func (s TtyStyler) Url(u *url.URL) string {
+	var b strings.Builder
+
+	b.WriteString(s.Verb(u.Scheme))
+
+	b.WriteString("://")
+
+	// TODO: add delimiter. What even is this part?
+	b.WriteString(u.Opaque)
+
+	// TODO: add delimiter.
+	b.WriteString(u.User.String())
+
+	b.WriteString(s.Noun(u.Host))
+
+	b.WriteString(s.UrlPath(u))
+
+	return b.String()
 }
 
 func (s TtyStyler) UrlPath(u *url.URL) string {
@@ -281,8 +302,27 @@ func (s TtyStyler) Issuer(cert *x509.Certificate) string {
 func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 	var b IndentingBuilder
 
-	b.Linef("DNS SANs %s", s.List(cert.DNSNames, AddrStyle))
-	b.Linef("IP SANs %s", s.List(Slice2Strings(cert.IPAddresses), AddrStyle))
+	b.Printf("SANs:")
+	if len(cert.DNSNames) == 0 && len(cert.IPAddresses) == 0 && len(cert.URIs) == 0 && len(cert.EmailAddresses) == 0 {
+		b.Printf(s.Info(" <none>"))
+		return b.String()
+	}
+
+	b.NewLine()
+	b.Indent()
+	if len(cert.DNSNames) > 0 {
+		b.Linef("DNS: %s", s.List(cert.DNSNames, AddrStyle))
+	}
+	if len(cert.IPAddresses) > 0 {
+		b.Linef("IPs: %s", s.List(Slice2Strings(cert.IPAddresses), AddrStyle))
+	}
+	if len(cert.URIs) > 0 {
+		b.Linef("URIs: %s", s.List(utils.Map(cert.URIs, s.Url), AddrStyle))
+	}
+	if len(cert.EmailAddresses) > 0 {
+		b.Linef("Emails: %s", s.List(cert.EmailAddresses, AddrStyle))
+	}
+	b.Dedent()
 
 	return b.String()
 }
