@@ -13,6 +13,7 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 
 	"github.com/mt-inside/go-usvc"
+
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
