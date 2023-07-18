@@ -77,7 +77,7 @@ func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	lm.reqData.HttpBody, err = io.ReadAll(r.Body)
 	lm.reqData.HttpBodyTime = &now
-	lm.b.CheckErr(err)
+	lm.b.Unwrap(err) // TODO: shouldn't kill things, should be saved in reqData (NB: req, not resp here) and printed later
 
 	/* Next */
 
@@ -238,7 +238,7 @@ func main() {
 		var url *url.URL = nil
 		if opts.PassthroughURL != "" {
 			url, err = url.Parse(opts.PassthroughURL)
-			b.CheckErr(err)
+			b.Unwrap(err)
 		}
 		actionMux = handlers.NewPassthroughHandler(url, srvData, reqData, respData)
 	}
@@ -250,40 +250,43 @@ func main() {
 		if opts.Cert != "" || opts.Key != "" {
 			if opts.TLSAlgo != "off" {
 				b.PrintErr("Can't supply TLS key+cert and also ask for self-signed")
+				os.Exit(1)
 			}
 
 			if opts.Cert == "" || opts.Key == "" {
 				b.PrintErr("Must supply both TLS server key and certificate")
+				os.Exit(1)
 			}
 
 			servingPair, err := tls.LoadX509KeyPair(opts.Cert, opts.Key)
-			b.CheckErr(err)
+			b.Unwrap(err)
 			srvData.TlsServingCertPair = &servingPair
 		}
 
 		if opts.TLSAlgo != "off" {
 			srvData.TlsServingSelfSign = true
 			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
-			b.CheckErr(err)
+			b.Unwrap(err)
 		}
 	}
 
 	if opts.ClientCA != "" {
 		if !srvData.TlsOn {
 			b.PrintErr("Can't verify TLS client certs without serving TLS")
+			os.Exit(1)
 		}
 
 		bytes, err := os.ReadFile(opts.ClientCA)
-		b.CheckErr(err)
+		b.Unwrap(err)
 		srvData.TlsClientCA, err = codec.ParseCertificate(bytes)
-		b.CheckErr(err)
+		b.Unwrap(err)
 	}
 
 	if opts.JWTValidatePath != "" {
 		bytes, err := os.ReadFile(opts.JWTValidatePath)
-		b.CheckErr(err)
+		b.Unwrap(err)
 		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
-		b.CheckErr(err)
+		b.Unwrap(err)
 	}
 
 	loggingMux := &logMiddle{
@@ -365,10 +368,10 @@ func main() {
 				return nil // can inspect all connection and TLS info and reject
 			},
 		}
-		b.CheckErr(srv.ListenAndServeTLS("", ""))
+		b.Unwrap(srv.ListenAndServeTLS("", ""))
 		b.Trace("Server shutting down")
 	} else {
-		b.CheckErr(srv.ListenAndServe())
+		b.Unwrap(srv.ListenAndServe())
 		b.Trace("Server shutting down")
 	}
 }

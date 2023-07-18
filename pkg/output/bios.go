@@ -14,7 +14,9 @@ type Bios interface {
 	PrintWarn(msg string)
 	PrintErr(msg string)
 
-	CheckInfo(err error) bool
-	CheckWarn(err error) bool
-	CheckErr(err error)
+	CheckPrintInfo(err error) bool
+	CheckPrintWarn(err error) bool
+	CheckPrintErr(err error) bool
+
+	Unwrap(err error)
 }
