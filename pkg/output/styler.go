@@ -445,7 +445,7 @@ func (s TtyStyler) VerifiedCertChain(
 		if ip := net.ParseIP(validateAddr); ip != nil {
 			validateAddr = "[" + ip.String() + "]"
 		}
-		b.Linef("Requested SNI (%s) in SANs? %s; in CN? %s",
+		b.Linef("Requested SNI (%s) in DNS/IP SANs? %s; in CN? %s",
 			s.au.Colorize(validateAddr, AddrStyle),
 			s.YesError(head.VerifyHostname(validateAddr)),
 			s.YesInfo(strings.EqualFold(head.Subject.CommonName, validateAddr)),
