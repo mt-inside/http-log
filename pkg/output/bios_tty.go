@@ -33,16 +33,16 @@ func (b TtyBios) GetLogger() logr.Logger {
 }
 
 func (b TtyBios) PrintOk(msg string) {
-	fmt.Print(b.s.RenderOk(msg))
+	fmt.Println(b.s.RenderOk(msg))
 }
 func (b TtyBios) PrintInfo(msg string) {
-	fmt.Print(b.s.RenderInfo(msg))
+	fmt.Println(b.s.RenderInfo(msg))
 }
 func (b TtyBios) PrintWarn(msg string) {
-	fmt.Print(b.s.RenderWarn(msg))
+	fmt.Println(b.s.RenderWarn(msg))
 }
 func (b TtyBios) PrintErr(msg string) {
-	fmt.Print(b.s.RenderErr(msg))
+	fmt.Println(b.s.RenderErr(msg))
 }
 
 func (b TtyBios) CheckPrintInfo(err error) bool {
