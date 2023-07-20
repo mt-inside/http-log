@@ -92,7 +92,7 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 		"%s Listening on %s %s\n",
 		o.s.Info(fmtTimestamp(s.TransportListenTime)),
 		o.s.Noun(s.TransportListenAddress.Network()),
-		o.s.Addr(s.TransportListenAddress.String()),
+		o.s.Addr(s.TransportListenAddress),
 	)
 
 	if s.TlsOn {
@@ -124,13 +124,19 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 
 // TransportSummary summarises the TCP connection details
 func (o TtyRenderer) TransportSummary(r *state.RequestData) {
+	quic := ""
+	if r.TransportVersion != 0 { // QUIC
+		quic = fmt.Sprintf("(quic %s) ", o.s.Noun(r.TransportVersion))
+	}
+
 	fmt.Printf(
-		"%s Connection %s %s %s -> %s\n",
+		"%s Connection %s %s %s%s -> %s\n",
 		o.s.Info(fmtTimestamp(r.TransportConnTime)),
 		o.s.Bright(r.TransportConnNo),
 		o.s.Noun(r.TransportRemoteAddress.Network()),
-		o.s.Addr(r.TransportRemoteAddress.String()),
-		o.s.Addr(r.TransportLocalAddress.String()),
+		quic,
+		o.s.Addr(r.TransportRemoteAddress),
+		o.s.Addr(r.TransportLocalAddress),
 	)
 }
 
@@ -369,8 +375,8 @@ func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
 		)
 		fmt.Printf(
 			"\t connection %s -> %s\n",
-			o.s.Addr(r.PassthroughLocalAddress.String()),
-			o.s.Addr(r.PassthroughRemoteAddress.String()),
+			o.s.Addr(r.PassthroughLocalAddress),
+			o.s.Addr(r.PassthroughRemoteAddress),
 		)
 	}
 	fmt.Printf(

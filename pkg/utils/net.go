@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"errors"
+	"fmt"
 	"net"
 	"strconv"
 )
@@ -49,7 +49,9 @@ func SplitNetAddr(addr net.Addr) (host, port string) {
 	switch a := addr.(type) {
 	case *net.TCPAddr:
 		return a.IP.String(), strconv.Itoa(a.Port)
+	case *net.UDPAddr:
+		return a.IP.String(), strconv.Itoa(a.Port)
 	default:
-		panic(errors.New("unknown net.Addr type"))
+		panic(fmt.Errorf("unknown net.Addr type %v", addr))
 	}
 }

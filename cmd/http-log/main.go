@@ -16,6 +16,9 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/logging"
 
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/handlers"
@@ -186,16 +189,16 @@ func main() {
 		}
 	}
 
-	//var s output.TtyStyler // TODO iface when log styler
+	var s output.TtyStyler // TODO iface when log styler
 	var b output.Bios
 	var op renderer
 	switch opts.Output {
 	case "text":
-		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
+		s = output.NewTtyStyler(aurora.NewAurora(false)) // no color
 		b = output.NewTtyBios(s, 10)
 		op = output.NewTtyRenderer(s)
 	case "pretty":
-		s := output.NewTtyStyler(aurora.NewAurora(true)) // color
+		s = output.NewTtyStyler(aurora.NewAurora(true)) // color
 		// TODO: verbosity option
 		b = output.NewTtyBios(s, 10)
 		op = output.NewTtyRenderer(s)
@@ -206,7 +209,7 @@ func main() {
 		//op = output.NewLogRenderer(l) //FIXME
 
 		// for now
-		s := output.NewTtyStyler(aurora.NewAurora(false))
+		s = output.NewTtyStyler(aurora.NewAurora(false))
 		b = output.NewTtyBios(s, 0)
 		op = output.NewTtyRenderer(s)
 	default:
@@ -298,80 +301,108 @@ func main() {
 		next:     actionMux,
 	}
 
-	srv := &http.Server{
-		Addr:              opts.ListenAddr,
-		ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
-		ReadTimeout:       120 * time.Second, // Time for reading request headers + body
-		WriteTimeout:      120 * time.Second, // Time for writing response (headers + body?)
-		IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
-		Handler:           loggingMux,
-		// Called when the http server starts listening
-		BaseContext: func(l net.Listener) context.Context {
-			codec.ParseListener(l, srvData)
+	// TODO: listen to both in paralell
+	if false {
+		srv := &http.Server{
+			Addr:              opts.ListenAddr,
+			ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
+			ReadTimeout:       120 * time.Second, // Time for reading request headers + body
+			WriteTimeout:      120 * time.Second, // Time for writing response (headers + body?)
+			IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
+			Handler:           loggingMux,
+			// Called when the http server starts listening
+			BaseContext: func(l net.Listener) context.Context {
+				codec.ParseListener(l, srvData)
 
-			// Now we're listening, print server info
-			op.ListenInfo(srvData)
+				// Now we're listening, print server info
+				op.ListenInfo(srvData)
 
-			return context.Background()
-		},
-		// Called when the http server accepts an incoming connection
-		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			// Note: ctx has a bunch of info under context-key "http-server"
-
-			requestNo++ // Think everything is single-threaded...
-			b.TraceWithName("tcp", "Accepting connection", "number", requestNo)
-			codec.ParseNetConn(c, requestNo, reqData)
-
-			return ctx
-		},
-		// Called when an http server connection changes state
-		ConnState: func(c net.Conn, cs http.ConnState) {
-			b.TraceWithName("http", "Connection state change", "state", cs)
-		},
-	}
-
-	if srvData.TlsOn {
-		srv.TLSConfig = &tls.Config{
-			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
-			/* Hooks in order they're called */
-			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				b.TraceWithName("tls", "ClientHello received, proposing TLS config")
-
-				codec.ParseTlsClientHello(hi, reqData)
-
-				// TODO: is TLSConfig how we stop it suggesting ciphers/whatever so old that Go's own client rejects them?
-				return nil, nil // option to bail handshake or change TLSConfig
+				return context.Background()
 			},
-			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				b.TraceWithName("tls", "Asked for serving cert")
-				if srvData.TlsServingSelfSign {
-					b.TraceWithName("tls", "Generating self-signed serving cert")
-					cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
-					if err == nil {
-						reqData.TlsNegServerCert = cert
-					}
-					return cert, err
-				}
+			// Called when the http server accepts an incoming connection
+			ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+				// Note: ctx has a bunch of info under context-key "http-server"
 
-				b.TraceWithName("tls", "Returning configured serving cert")
-				return srvData.TlsServingCertPair, nil
+				requestNo++ // Think everything is single-threaded...
+				b.TraceWithName("transport", "Accepting connection", "number", requestNo)
+				codec.ParseNetConn(c, requestNo, reqData)
+
+				return ctx
 			},
-			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
-				return nil // can do extra cert verification and reject
-			},
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				b.TraceWithName("tls", "Connection parameter validation")
-
-				codec.ParseTlsConnectionState(&cs, reqData)
-
-				return nil // can inspect all connection and TLS info and reject
+			// Called when an http server connection changes state
+			ConnState: func(c net.Conn, cs http.ConnState) {
+				b.TraceWithName("http", "Connection state change", "state", cs)
 			},
 		}
-		b.Unwrap(srv.ListenAndServeTLS("", ""))
-		b.Trace("Server shutting down")
+
+		if srvData.TlsOn {
+			srv.TLSConfig = getTlsConfig(s, b, srvData, reqData)
+			b.Unwrap(srv.ListenAndServeTLS("", ""))
+		} else {
+			b.Unwrap(srv.ListenAndServe())
+		}
 	} else {
-		b.Unwrap(srv.ListenAndServe())
-		b.Trace("Server shutting down")
+		srv := &http3.Server{
+			Addr:      opts.ListenAddr,
+			Handler:   loggingMux,
+			TLSConfig: getTlsConfig(s, b, srvData, reqData),
+			QuicConfig: &quic.Config{
+				Tracer: func(ctx context.Context, perspective logging.Perspective, connId quic.ConnectionID) logging.ConnectionTracer {
+					return &myTracer{s, b, reqData, &requestNo}
+				},
+			},
+		}
+
+		// There's no "socket listening" callback, so that stuff here
+		now := time.Now()
+		srvData.TransportListenTime = &now
+		udpAddr, err := net.ResolveUDPAddr("udp", opts.ListenAddr)
+		b.Unwrap(err)
+		srvData.TransportListenAddress = udpAddr
+		op.ListenInfo(srvData)
+
+		b.Unwrap(srv.ListenAndServe()) // confusingly-named method. ...TLS() takes keymat as args, this one does TLS, but uses the TLSConfig
+	}
+
+	b.Trace("Server shutting down")
+}
+
+func getTlsConfig(s output.TtyStyler, b output.Bios, srvData *state.DaemonData, reqData *state.RequestData) *tls.Config {
+	return &tls.Config{
+		ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
+		/* Hooks in order they're called */
+		GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
+			b.TraceWithName("tls", "ClientHello received, proposing TLS config")
+
+			codec.ParseTlsClientHello(hi, reqData)
+
+			// TODO: is TLSConfig how we stop it suggesting ciphers/whatever so old that Go's own client rejects them?
+			return nil, nil // option to bail handshake or change TLSConfig
+		},
+		GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			b.TraceWithName("tls", "Asked for serving cert")
+			if srvData.TlsServingSelfSign {
+				b.TraceWithName("tls", "Generating self-signed serving cert")
+				cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
+				if err == nil {
+					reqData.TlsNegServerCert = cert
+				}
+				return cert, err
+			}
+
+			b.TraceWithName("tls", "Returning configured serving cert")
+			return srvData.TlsServingCertPair, nil
+		},
+		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
+			return nil // can do extra cert verification and reject
+		},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			b.TraceWithName("tls", "Connection parameter validation")
+
+			codec.ParseTlsConnectionState(&cs, reqData)
+
+			return nil // can inspect all connection and TLS info and reject
+		},
 	}
 }
