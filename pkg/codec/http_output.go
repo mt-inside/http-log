@@ -12,15 +12,18 @@ import (
 )
 
 func ParseListener(l net.Listener, d *state.DaemonData) {
-	now := time.Now()
-	d.TransportListenTime = &now
+	listen := state.TransportListen{
+		Time: time.Now(),
+	}
 
 	switch lis := l.(type) {
 	case *net.TCPListener:
-		d.TransportListenAddress = lis.Addr()
+		listen.Address = lis.Addr()
 	default: // assume it's an (unexported) *tls.listener
-		d.TransportListenAddress = l.Addr()
+		listen.Address = l.Addr()
 	}
+
+	d.TransportListen = append(d.TransportListen, listen)
 }
 
 // TODO; move to codec.tcp.go

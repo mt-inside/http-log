@@ -88,12 +88,14 @@ func (o TtyRenderer) Version() {
 }
 
 func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
-	fmt.Printf(
-		"%s Listening on %s %s\n",
-		o.s.Info(fmtTimestamp(s.TransportListenTime)),
-		o.s.Noun(s.TransportListenAddress.Network()),
-		o.s.Addr(s.TransportListenAddress),
-	)
+	for _, lis := range s.TransportListen {
+		fmt.Printf(
+			"%s Listening on %s %s\n",
+			o.s.Info(fmtTimestamp(&lis.Time)),
+			o.s.Noun(lis.Address.Network()),
+			o.s.Addr(lis.Address),
+		)
+	}
 
 	if s.TlsOn {
 		if s.TlsServingSelfSign {

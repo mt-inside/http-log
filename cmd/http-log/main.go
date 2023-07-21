@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -301,8 +302,10 @@ func main() {
 		next:     actionMux,
 	}
 
-	// TODO: listen to both in paralell
-	if false {
+	var listeningWg, doneWg sync.WaitGroup
+	listeningWg.Add(2)
+	doneWg.Add(2)
+	go func() {
 		srv := &http.Server{
 			Addr:              opts.ListenAddr,
 			ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
@@ -314,8 +317,7 @@ func main() {
 			BaseContext: func(l net.Listener) context.Context {
 				codec.ParseListener(l, srvData)
 
-				// Now we're listening, print server info
-				op.ListenInfo(srvData)
+				listeningWg.Done()
 
 				return context.Background()
 			},
@@ -341,7 +343,9 @@ func main() {
 		} else {
 			b.Unwrap(srv.ListenAndServe())
 		}
-	} else {
+		doneWg.Done()
+	}()
+	go func() {
 		srv := &http3.Server{
 			Addr:      opts.ListenAddr,
 			Handler:   loggingMux,
@@ -354,15 +358,26 @@ func main() {
 		}
 
 		// There's no "socket listening" callback, so that stuff here
-		now := time.Now()
-		srvData.TransportListenTime = &now
 		udpAddr, err := net.ResolveUDPAddr("udp", opts.ListenAddr)
 		b.Unwrap(err)
-		srvData.TransportListenAddress = udpAddr
-		op.ListenInfo(srvData)
+		srvData.TransportListen = append(srvData.TransportListen, state.TransportListen{
+			Time:    time.Now(),
+			Address: udpAddr,
+		})
+		listeningWg.Done()
 
 		b.Unwrap(srv.ListenAndServe()) // confusingly-named method. ...TLS() takes keymat as args, this one does TLS, but uses the TLSConfig
-	}
+		doneWg.Done()
+	}()
+	
+	don't start h3 if there's no TLSEnabled (and print such)
+	h2 and h3 require TLS.
+	- can't serve h3 without it, cause can't set up quic connections
+	- making a tcp connection and not doing a tls handshake won't give you ALPN thus the chance to negotiate h2, so you'll be on h1
+
+	listeningWg.Wait()
+	op.ListenInfo(srvData)
+	doneWg.Wait()
 
 	b.Trace("Server shutting down")
 }
