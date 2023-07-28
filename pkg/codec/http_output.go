@@ -73,6 +73,12 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 	d.HttpHost = r.Host
 	d.HttpUserAgent = r.Header.Get("User-Agent")
 
+	// Build a map (so that we don't have to call Cookies() later, and for faster lookups than that).
+	// I don't believe cookie names can be duplicated
+	for _, c := range r.Cookies() {
+		d.HttpCookies[c.Name] = c
+	}
+
 	d.HttpContentLength = r.ContentLength
 	d.HttpContentType = r.Header.Get("Content-Type")
 

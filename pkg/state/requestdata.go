@@ -48,6 +48,8 @@ type RequestData struct {
 	HttpHost      string
 	HttpUserAgent string
 
+	HttpCookies map[string]*http.Cookie
+
 	HttpHops []*Hop
 
 	AuthJwt    *jwt.Token
@@ -61,7 +63,9 @@ type RequestData struct {
 }
 
 func NewRequestData() *RequestData {
-	return &RequestData{}
+	return &RequestData{
+		HttpCookies: map[string]*http.Cookie{},
+	}
 }
 
 type ResponseData struct {

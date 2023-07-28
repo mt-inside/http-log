@@ -11,6 +11,7 @@ this class should
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -228,7 +229,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 // HeadSummary summarises the application-layer request header
 func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	fmt.Printf(
-		"%s HTTP/%s vhost %s | %s %s by %s\n",
+		"%s HTTP/%s vhost %s | %s %s by %s (%s headers, %s cookie values)\n",
 		o.s.Info(getTimestamp()),
 		o.s.Noun(d.HttpProtocolVersion),
 		o.s.Addr(d.HttpHost),
@@ -236,6 +237,8 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
 		o.s.PathElements(d.HttpPath, d.HttpQuery, d.HttpFragment),
 		o.s.Noun(d.HttpUserAgent),
+		o.s.Noun(len(d.HttpHeaders)),
+		o.s.Noun(len(d.HttpCookies)),
 	)
 
 	if d.AuthJwt != nil {
@@ -279,10 +282,22 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		for _, v := range vs {
 			// We deliberately "unfold" headers with multiple values, however they're sent on the wire (which the library doesn't let us see), as it's easier to read.
 			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(v))
+			// TODO: truncate value of Cookie, as it's rendered in full below
 		}
 	}
 	if len(d.HttpHeaders) == 0 {
 		fmt.Println(o.s.Info("\t<none>"))
+	}
+
+	fmt.Println("Cookies")
+	for n, c := range d.HttpCookies {
+		val := c.Value
+		decoded := ""
+		if b64, err := base64.StdEncoding.DecodeString(val); err == nil {
+			val = string(b64)
+			decoded = " (decoded base64)"
+		}
+		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(val))
 	}
 
 	if d.AuthJwt != nil {
