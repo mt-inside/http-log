@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // This layer exists so that different op "stages" can use info from other ones, eg printing HSTS header info with TLS stuff
