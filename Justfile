@@ -8,7 +8,7 @@ REPO := "docker.io/" + DH_USER + "/http-log"
 TAG := `git describe --tags --abbrev`
 TAGD := `git describe --tags --abbrev --dirty`
 ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
-CGR_ARCHS := "aarch64" # "amd64,aarch64,armv7"
+CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 
 install-tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -85,25 +85,22 @@ snyk:
 	snyk test .
 	snyk container test {{REPO}}:{{TAG}}
 
-MELANGE := "docker run --pull always --rm --privileged -v ${PWD}:/work cgr.dev/chainguard/melange:latest"
-APKO    := "docker run --pull always --rm -v ${PWD}:/work cgr.dev/chainguard/apko:latest"
-APKO_SH := "docker run --pull always --rm -v ${PWD}:/work --entrypoint sh cgr.dev/chainguard/apko:latest"
+MELANGE := "melange"
+APKO    := "apko"
 
 melange:
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
 	{{MELANGE}} keygen
-	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key /work/melange.rsa melange.yaml
+	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
 package-cgr: #melange
 	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
 	docker load < http-log.tar
 publish-cgr: #melange
-	{{APKO_SH}} -c \
-		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko.yaml {{REPO}}:{{TAG}} --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}}'
+	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
+	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}}
 publish-cgr-no-certs: #melange
-	{{APKO_SH}} -c \
-		'echo "'${DH_TOKEN}'" | apko login docker.io -u {{DH_USER}} --password-stdin && \
-		apko publish apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}}'
+	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
+	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs
 
 sbom-show:
 	docker sbom {{REPO}}:{{TAG}}
