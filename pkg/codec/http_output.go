@@ -84,5 +84,10 @@ func ParseHttpRequest(r *http.Request, srvData *state.DaemonData, d *state.Reque
 
 	d.HttpHops = ExtractProxies(d, srvData)
 
-	d.AuthJwt, d.AuthJwtErr = ExtractAndParseJWT(r, srvData.AuthJwtValidateKey)
+	d.AuthOIDC, d.AuthJwt, d.AuthJwtErr = TryFetchOIDCInfo(d)
+
+	if !d.AuthOIDC {
+		// was no OIDC token, look for "normal" bearer ones
+		d.AuthJwt, d.AuthJwtErr = ExtractAndParseJWT(r, srvData.AuthJwtValidateKey)
+	}
 }

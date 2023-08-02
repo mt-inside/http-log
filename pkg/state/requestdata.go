@@ -1,6 +1,7 @@
 package state
 
 import (
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"net"
@@ -54,6 +55,9 @@ type RequestData struct {
 
 	AuthJwt    *jwt.Token
 	AuthJwtErr error
+
+	AuthOIDC     bool
+	AuthOIDCJwks map[string]crypto.PublicKey
 
 	HttpBodyTime      *time.Time // When the body finished being read
 	HttpContentLength int64
