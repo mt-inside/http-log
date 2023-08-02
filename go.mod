@@ -2,6 +2,8 @@ module github.com/mt-inside/http-log
 
 go 1.20
 
+replace github.com/mt-inside/pem2jwks => ../pem2jwks
+
 require (
 	github.com/aws/aws-lambda-go v1.41.0
 	github.com/davecgh/go-spew v1.1.1
@@ -11,6 +13,7 @@ require (
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mattn/go-isatty v0.0.19
 	github.com/mt-inside/go-usvc v0.0.7
+	github.com/mt-inside/pem2jwks v0.0.10
 )
 
 require (
