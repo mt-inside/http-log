@@ -11,8 +11,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/pem2jwks/pkg/jwks"
+
+	"github.com/mt-inside/http-log/pkg/state"
 )
 
 // TODO: shouldn't return the IdToken as token, it's authN / access token metadata; should build one from the userinfo, cause that's the authz info. Or probably add userinfo into it (return a map not a Token) - flow has to work for "proper" jwt bearer tokens too
