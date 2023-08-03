@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/kr/pretty"
 
 	"github.com/mt-inside/pem2jwks/pkg/jwks"
 
@@ -110,8 +111,8 @@ func TryFetchOIDCInfo(d *state.RequestData) (found bool, token *jwt.Token, token
 		return
 	}
 
-	//pretty.Print(oidcUserinfo)
-	//fmt.Println()
+	pretty.Print(oidcUserinfo)
+	fmt.Println()
 
 	// ===
 	// Public Keys

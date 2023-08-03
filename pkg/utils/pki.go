@@ -70,7 +70,7 @@ func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 
 		err = pem.Encode(keyPem, &pem.Block{
 			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(key),
+			Bytes: x509.MarshalPKCS1PrivateKey(key), // TODO: pkcs8 prolly better, remove the RSA from the pem block when you do it
 		})
 		if err != nil {
 			return nil, err
@@ -95,7 +95,7 @@ func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 
 		keyBytes, _ := x509.MarshalECPrivateKey(key)
 		err = pem.Encode(keyPem, &pem.Block{
-			Type:  "ECDSA PRIVATE KEY",
+			Type:  "ECDSA PRIVATE KEY", // TODO: this is "EC PRIVATE KEY" i belive. Should prolly use pkcs8 anyway
 			Bytes: keyBytes,
 		})
 		if err != nil {

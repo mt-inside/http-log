@@ -273,7 +273,11 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Printf("Fragment: %s\n", o.s.Addr(d.HttpFragment))
 	}
 
-	fmt.Println("Headers")
+	if len(d.HttpHeaders) > 0 {
+		fmt.Println("Headers")
+	} else {
+		fmt.Println("No Headers")
+	}
 	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
 	// TODO: Truncate header values (even for Full), have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
 	// TODO: truncate to max(72, terminal width)
@@ -289,7 +293,11 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Println(o.s.Info("\t<none>"))
 	}
 
-	fmt.Println("Cookies")
+	if len(d.HttpCookies) > 0 {
+		fmt.Println("Cookies")
+	} else {
+		fmt.Println("No Cookies")
+	}
 	for n, c := range d.HttpCookies {
 		val := c.Value
 		decoded := ""
