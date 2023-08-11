@@ -141,11 +141,17 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 	defer oidcDiscoResp.Body.Close()
 	b.TraceWithName("oidc", "Fetched OIDC Discovery Document", "status", oidcDiscoResp.Status)
 
+	if !(oidcDiscoResp.StatusCode >= 200 && oidcDiscoResp.StatusCode < 400) {
+		return // Nothing else we can do if we can't get the disco doc
+	}
+
 	oidcDisco := map[string]interface{}{} // TODO type this
 	err = json.NewDecoder(oidcDiscoResp.Body).Decode(&oidcDisco)
 	if b.CheckPrintErr(err) {
 		return
 	}
+	d.AuthOIDCDiscoSupportedClaims = utils.MapAnyToString(oidcDisco["claims_supported"].([]any))
+	d.AuthOIDCDiscoSupportedSigs = utils.MapAnyToString(oidcDisco["id_token_signing_alg_values_supported"].([]any))
 
 	//pretty.Println(oidcDisco)
 
@@ -176,7 +182,7 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 			return
 		}
 
-		pretty.Println(oidcUserinfo)
+		d.AuthOIDCUserinfo = oidcUserinfo
 	}
 
 	// ===
