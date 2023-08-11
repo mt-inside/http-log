@@ -66,7 +66,7 @@ func TryFetchOIDCInfo(d *state.RequestData) (found bool, token *jwt.Token, token
 	if err != nil {
 		return
 	}
-	oidcDiscoRequest.Header.Set("User-Agent", "print-cert")                          // TODO from build info
+	oidcDiscoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcDiscoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	// TODO: debug. Make a struct to pass around containing { s, b, log }
 	fmt.Println("Fetching OIDC Discovery Document from", oidcDiscoURI)
@@ -94,7 +94,7 @@ func TryFetchOIDCInfo(d *state.RequestData) (found bool, token *jwt.Token, token
 		return
 	}
 	// TODO factor out with above
-	oidcUserinfoRequest.Header.Set("User-Agent", "print-cert")                          // TODO from build info
+	oidcUserinfoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcUserinfoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	fmt.Println("Fetching OIDC Userinfo from", oidcUserinfoRequest.URL)
 	oidcUserinfoResp, err := oidcClient.Do(oidcUserinfoRequest)
@@ -123,7 +123,7 @@ func TryFetchOIDCInfo(d *state.RequestData) (found bool, token *jwt.Token, token
 		return
 	}
 	// TODO factor out with above
-	oidcJWKSRequest.Header.Set("User-Agent", "print-cert")                          // TODO from build info
+	oidcJWKSRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcJWKSRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	fmt.Println("Fetching OIDC JWKS from", oidcJWKSRequest.URL)
 	oidcJWKSResp, err := oidcClient.Do(oidcJWKSRequest)
