@@ -16,55 +16,58 @@ install-tools:
 	go install golang.org/x/tools/cmd/goimports@latest
 
 lint:
+	gofmt -s -w .
 	goimports -local github.com/mt-inside/http-log -w .
 	go vet ./...
 	staticcheck ./...
 	golangci-lint run ./... # TODO: --enable-all
+
+test: lint
 	go test ./...
 
-build: lint
+build: test
 	# Use CGO here, like in the container, so this binary is pretty representative.
 	# Don't statically link though, as that's a nightmare on all possible dev machines.
 	go build -a -ldflags "-X 'github.com/mt-inside/http-log/pkg/build.Version="{{TAGD}}"'" ./cmd/http-log
 
-build-lambda: lint
+build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
 
-run-daemon *ARGS: lint
+run-daemon *ARGS: test
 	go run ./cmd/http-log -K=ecdsa {{ARGS}}
 
-run-daemon-mtls-jwt *ARGS: lint
+run-daemon-mtls-jwt *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -l -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
-run-daemon-mtls-self-sign-jwt *ARGS: lint
+run-daemon-mtls-self-sign-jwt *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -l -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
-run-daemon-mtls-jwt-all-summaries *ARGS: lint
+run-daemon-mtls-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -l -n -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
-run-daemon-mtls-self-sign-jwt-all-summaries *ARGS: lint
+run-daemon-mtls-self-sign-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -l -n -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
-run-daemon-mtls-jwt-all-fulls *ARGS: lint
+run-daemon-mtls-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -L -N -T -M -B -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
-run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: lint
+run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
-run-daemon-proxy-mtls-self-sign-jwt-all-summaries *ARGS: lint
+run-daemon-proxy-mtls-self-sign-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -p http://localhost:8888 -L -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
-run-daemon-proxy-mtls-self-sign-jwt-all-fulls *ARGS: lint
+run-daemon-proxy-mtls-self-sign-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
 	go run ./cmd/http-log -p http://localhost:8888 -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
-run-daemon-proxy-backend *ARGS: lint
+run-daemon-proxy-backend *ARGS: test
 	go run ./cmd/http-log -a localhost:8888 -L -t -M -b -r {{ARGS}}
-run-daemon-proxy-backend-all-fulls *ARGS: lint
+run-daemon-proxy-backend-all-fulls *ARGS: test
 	go run ./cmd/http-log -a localhost:8888 -L -T -M -B -R {{ARGS}}
 
 
@@ -88,7 +91,7 @@ snyk:
 MELANGE := "melange"
 APKO    := "apko"
 
-melange: lint
+melange: test
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
