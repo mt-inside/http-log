@@ -25,6 +25,12 @@ lint:
 test: lint
 	go test ./...
 
+render-mod-graph:
+	go mod graph | modgraphviz | dot -Tpng -o mod_graph.png
+
+render-pkg-graph:
+	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
+
 build: test
 	# Use CGO here, like in the container, so this binary is pretty representative.
 	# Don't statically link though, as that's a nightmare on all possible dev machines.
