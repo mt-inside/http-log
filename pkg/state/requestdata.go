@@ -54,8 +54,11 @@ type RequestData struct {
 	AuthJwt    *jwt.Token
 	AuthJwtErr error
 
-	AuthOIDC     bool
-	AuthOIDCJwks map[string]any
+	AuthOIDC                     bool
+	AuthOIDCDiscoSupportedClaims []string
+	AuthOIDCDiscoSupportedSigs   []string
+	AuthOIDCUserinfo             map[string]string
+	AuthOIDCJwks                 map[string]any
 
 	HttpBodyTime      *time.Time // When the body finished being read
 	HttpContentLength int64

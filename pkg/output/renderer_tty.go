@@ -298,6 +298,12 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(val))
 	}
 
+	if d.AuthOIDC {
+		fmt.Printf("OIDC\n")
+		fmt.Printf("\tDiscovery: IdToken sig algos %s; Supported claims %s\n", o.s.List(d.AuthOIDCDiscoSupportedSigs, NounStyle), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)))
+		fmt.Printf("\tExtra Userinfo: %s\n", o.s.Map(d.AuthOIDCUserinfo, NounStyle))
+	}
+
 	if d.AuthJwt != nil {
 		fmt.Printf("%s %s\n", o.s.Info(getTimestamp()), o.s.JWTSummary(d.AuthJwt))
 

@@ -32,6 +32,7 @@ const (
 	AddrStyle   aurora.Color = aurora.BlueFg
 	VerbStyle   aurora.Color = aurora.MagentaFg
 	NounStyle   aurora.Color = aurora.CyanFg
+	NumberStyle aurora.Color = aurora.CyanFg
 	BrightStyle aurora.Color = aurora.WhiteFg | aurora.BrightFg
 )
 
@@ -82,6 +83,12 @@ func (s TtyStyler) Noun(v any) string {
 		return s.Info("<none>")
 	}
 	return s.au.Colorize(v, NounStyle).String()
+}
+func (s TtyStyler) Number(v any) string {
+	if len(fmt.Sprint(v)) == 0 {
+		return s.Info("<none>")
+	}
+	return s.au.Colorize(v, NumberStyle).String()
 }
 func (s TtyStyler) Bright(v any) string {
 	if len(fmt.Sprint(v)) == 0 {
@@ -240,13 +247,13 @@ func (s TtyStyler) YesErrorWarning(err error, warning bool) string {
 }
 
 func (s TtyStyler) List(ins []string, style aurora.Color) string {
-	var b strings.Builder
-
 	if len(ins) == 0 {
 		return s.au.Colorize("<none>", InfoStyle).String()
 	}
 
+	var b strings.Builder
 	printLen := 0
+
 	for i, in := range ins {
 		newPrintLen := printLen + len(in) // without the escape sequences
 		if i != len(ins)-1 {
@@ -266,6 +273,25 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 		}
 
 		printLen = newPrintLen
+	}
+
+	return b.String()
+}
+
+func (s TtyStyler) Map(ins map[string]string, style aurora.Color) string {
+	if len(ins) == 0 {
+		return s.au.Colorize("<none>", InfoStyle).String()
+	}
+
+	var b strings.Builder
+
+	// TODO: printlen constraint
+
+	for k, v := range ins {
+		b.WriteString(s.au.Colorize(k, NounStyle).String())
+		b.WriteString(": ")
+		b.WriteString(s.au.Colorize(v, style).String())
+		b.WriteString("; ")
 	}
 
 	return b.String()
