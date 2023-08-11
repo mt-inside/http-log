@@ -1,18 +1,8 @@
 package output
 
-/*
-the idea is that this can be used from multiple places, even those that aren't an http daemon (expand to CF worker, envoy filter, etc)
-this class should
-- low-level methods like SetHops(), SetTLSVersion(), SetCertChain() (used behind an interface so can't be fields)
-- functions like IngestHTTPRequest should be in CODEC, make them for lambda etc too
-- then methods like printTCP, printTLS, printHTTP - caller's main decides order, flow, etc
-- think about control flow so it prints as much as it can in the face of any error - panic/recover, with a custom error type we can throw, essentially for exceptional return? What goroutine do http hooks run on?
-*/
-
 import (
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -245,7 +235,7 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 		fmt.Printf("%s %s [valid? %s]\n",
 			o.s.Info(getTimestamp()),
 			o.s.JWTSummary(d.AuthJwt),
-			o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})),
+			o.s.YesError(d.AuthJwtErr),
 		)
 	}
 }
@@ -318,7 +308,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		sigAlgo, hashAlgo := codec.JWTSignatureInfo(d.AuthJwt)
 		fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
-		fmt.Printf("\tvalid? %s\n", o.s.YesErrorWarning(d.AuthJwtErr, errors.Is(d.AuthJwtErr, codec.NoValidationKeyError{})))
+		fmt.Printf("\tvalid? %s\n", o.s.YesError(d.AuthJwtErr))
 	}
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc

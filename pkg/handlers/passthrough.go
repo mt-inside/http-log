@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/state"
+	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 // TODO: can we rebase this onto https://pkg.go.dev/net/http/httputil@master#ReverseProxy
 // - go 1.20 will add a new Rewrite hook with even more power
-var hopHeaders = map[string]bool{
+var perReqHeaders = map[string]bool{
 	"Connection":          true,
 	"Keep-Alive":          true,
 	"Proxy-Authenticate":  true,
@@ -117,7 +117,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	req.RequestURI = "" // Can't be set on client requests
 
-	for h := range hopHeaders {
+	for h := range perReqHeaders {
 		req.Header.Del(h)
 	}
 
@@ -155,7 +155,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if via != "" {
 		via += ", "
 	}
-	via += ph.reqData.HttpProtocolVersion + " " + codec.Hostname()
+	via += ph.reqData.HttpProtocolVersion + " " + utils.Hostname()
 	req.Header.Set("via", via)
 
 	/* Send */
@@ -182,7 +182,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	/* Headers */
 
 	for k, vs := range resp.Header {
-		if hopHeaders[k] {
+		if perReqHeaders[k] {
 			continue
 		}
 		for _, v := range vs {
@@ -198,7 +198,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if respVia != "" {
 		respVia += ", "
 	}
-	respVia += ph.reqData.HttpProtocolVersion + " " + codec.Hostname()
+	respVia += ph.reqData.HttpProtocolVersion + " " + utils.Hostname()
 	w.Header().Set("via", respVia)
 	// TODO: should any other forwarded-style headers be set by reverse proxies?
 
