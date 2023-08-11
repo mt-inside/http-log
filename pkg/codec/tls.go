@@ -42,6 +42,7 @@ func ParseCertificate(cert []byte) (*x509.Certificate, error) {
 	}
 	return nil, err
 }
+
 func HeadFromCertificate(cert *tls.Certificate) *x509.Certificate {
 	c, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
@@ -51,6 +52,7 @@ func HeadFromCertificate(cert *tls.Certificate) *x509.Certificate {
 	}
 	return c
 }
+
 func ChainFromCertificate(tlsCert *tls.Certificate) (x509Certs []*x509.Certificate) {
 	for _, tlsBytes := range tlsCert.Certificate {
 		x509Cert, err := x509.ParseCertificate(tlsBytes)

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/mt-inside/http-log/pkg/codec"
+	"github.com/mt-inside/http-log/pkg/extractor"
 	"github.com/mt-inside/http-log/pkg/handlers"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/state"
@@ -36,142 +36,36 @@ func init() {
 	spew.Config.DisablePointerMethods = true
 }
 
-type renderer interface {
-	Version()
-	ListenInfo(d *state.DaemonData)
-
-	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)
-	TransportSummary(d *state.RequestData)
-	TransportFull(d *state.RequestData)
-	TLSNegSummary(d *state.RequestData)
-	TLSNegFull(r *state.RequestData, s *state.DaemonData)
-	TLSAgreedSummary(r *state.RequestData, s *state.DaemonData)
-	TLSAgreedFull(r *state.RequestData, s *state.DaemonData)
-	HeadSummary(d *state.RequestData)
-	HeadFull(d *state.RequestData)
-	BodySummary(d *state.RequestData)
-	BodyFull(d *state.RequestData)
-	ResponseSummary(d *state.ResponseData)
-	ResponseFull(d *state.ResponseData)
-}
-
 var requestNo uint64
-
-// TODO: move out of this file
-type logMiddle struct {
-	b        output.Bios
-	op       renderer
-	reqData  *state.RequestData
-	respData *state.ResponseData
-	srvData  *state.DaemonData
-	next     http.Handler
-}
-
-func (lm logMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	/* Record request info */
-
-	codec.ParseHttpRequest(r, lm.srvData, lm.reqData)
-
-	now := time.Now()
-	var err error
-	lm.reqData.HttpBody, err = io.ReadAll(r.Body)
-	lm.reqData.HttpBodyTime = &now
-	lm.b.Unwrap(err) // TODO: shouldn't kill things, should be saved in reqData (NB: req, not resp here) and printed later
-
-	/* Next */
-
-	lm.next.ServeHTTP(w, r)
-
-	/* Request-response is over: print */
-	lm.output()
-}
-
-func (lm logMiddle) output() {
-
-	if opts.ConnectionSummary {
-		lm.op.TransportSummary(lm.reqData)
-	} else if opts.ConnectionFull {
-		lm.op.TransportFull(lm.reqData)
-	}
-
-	if lm.srvData.TlsOn {
-		if opts.NegotiationFull {
-			lm.op.TLSNegFull(lm.reqData, lm.srvData)
-		} else if opts.NegotiationSummary {
-			lm.op.TLSNegSummary(lm.reqData)
-		}
-		if opts.TLSFull {
-			lm.op.TLSAgreedFull(lm.reqData, lm.srvData)
-		} else if opts.TLSSummary {
-			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-			lm.op.TLSAgreedSummary(lm.reqData, lm.srvData)
-		}
-	}
-
-	if opts.HeadFull {
-		lm.op.HeadFull(lm.reqData)
-	} else if opts.HeadSummary {
-		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
-		lm.op.HeadSummary(lm.reqData)
-	}
-
-	// Print only if the method would traditionally have a body
-	if (opts.BodyFull || opts.BodySummary) && (lm.reqData.HttpMethod == http.MethodPost || lm.reqData.HttpMethod == http.MethodPut || lm.reqData.HttpMethod == http.MethodPatch) {
-		if opts.BodyFull {
-			lm.op.BodyFull(lm.reqData)
-		} else if opts.BodySummary {
-			lm.op.BodySummary(lm.reqData)
-		}
-	}
-
-	if opts.ResponseFull {
-		lm.op.ResponseFull(lm.respData)
-	} else if opts.ResponseSummary {
-		lm.op.ResponseSummary(lm.respData)
-	}
-}
-
-// TODO: move into main. Anything preventing that is wrong
-var opts struct {
-	// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
-	/* Network options */
-	ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-	Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
-
-	/* Response options */
-	Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
-	ResponseFormat  string `short:"f" long:"response-format" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
-	PassthroughAuto bool   `short:"P" long:"passthrough-auto" description:"Proxy request to the URL in the received request"`
-	PassthroughURL  string `short:"p" long:"passthrough-url" description:"Proxy request to given URL" default:""`
-
-	/* TLS and validation */
-	Cert            string `short:"c" long:"cert" optional:"yes" description:"Path to TLS server certificate. Setting this implies serving https"`
-	Key             string `short:"k" long:"key" optional:"yes" description:"Path to TLS server key. Setting this implies serving https"`
-	TLSAlgo         string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
-	ClientCA        string `short:"C" long:"ca" optional:"yes" description:"Path to TLS client CA certificate"`
-	JWTValidatePath string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
-
-	/* Logging settings */
-	Output             string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
-	ConnectionSummary  bool   `short:"l" long:"connection" description:"Print summary of connection (eg TCP) information"`
-	ConnectionFull     bool   `short:"L" long:"connection-full" description:"Print all connection (eg TCP) information"`
-	NegotiationSummary bool   `short:"n" long:"negotiation" description:"Print transport (eg TLS) setup negotiation summary, notable the SNI ServerName being requested"`
-	NegotiationFull    bool   `short:"N" long:"negotiation-full" description:"Print transport (eg TLS) setup negotiation values, ie what both sides offer to support"`
-	TLSSummary         bool   `short:"t" long:"tls" description:"Print important agreed TLS parameters"`
-	TLSFull            bool   `short:"T" long:"tls-full" description:"Print all agreed TLS parameters"`
-	HeadSummary        bool   `short:"m" long:"head" description:"Print important HTTP request metadata"`
-	HeadFull           bool   `short:"M" long:"head-full" description:"Print all HTTP request metadata"`
-	BodySummary        bool   `short:"b" long:"body" description:"Print truncated HTTP request body"`
-	BodyFull           bool   `short:"B" long:"body-full" description:"Print full HTTP request body"`
-	ResponseSummary    bool   `short:"r" long:"response" description:"Print summary of HTTP response"`
-	ResponseFull       bool   `short:"R" long:"response-full" description:"Print full information about HTTP response"`
-}
 
 // TODO: cobra + viper(? - go-flags is really nice)
 func main() {
 
 	/* == Parse and grok arguments == */
+
+	var opts struct {
+		// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
+		/* Network options */
+		ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+		Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
+
+		/* Response options */
+		Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
+		ResponseFormat  string `short:"f" long:"response-format" description:"HTTP response body format" choice:"none" choice:"text" choice:"json" choice:"xml" default:"text"`
+		PassthroughAuto bool   `short:"P" long:"passthrough-auto" description:"Proxy request to the URL in the received request"`
+		PassthroughURL  string `short:"p" long:"passthrough-url" description:"Proxy request to given URL" default:""`
+
+		/* TLS and validation */
+		Cert            string `short:"c" long:"cert" optional:"yes" description:"Path to TLS server certificate. Setting this implies serving https"`
+		Key             string `short:"k" long:"key" optional:"yes" description:"Path to TLS server key. Setting this implies serving https"`
+		TLSAlgo         string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
+		ClientCA        string `short:"C" long:"ca" optional:"yes" description:"Path to TLS client CA certificate"`
+		JWTValidatePath string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
+
+		/* Output options */
+		Output string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
+		output.RendererOpts
+	}
 
 	_, err := flags.Parse(&opts)
 	if err != nil {
@@ -188,7 +82,7 @@ func main() {
 
 	//var s output.TtyStyler // TODO iface when log styler
 	var b output.Bios
-	var op renderer
+	var op output.Renderer
 	switch opts.Output {
 	case "text":
 		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
@@ -289,14 +183,15 @@ func main() {
 		b.Unwrap(err)
 	}
 
-	loggingMux := &logMiddle{
-		reqData:  reqData,
-		respData: respData,
-		srvData:  srvData,
-		b:        b,
-		op:       op,
-		next:     actionMux,
-	}
+	loggingMux := handlers.NewLogMiddle(
+		b,
+		op,
+		opts.RendererOpts,
+		reqData,
+		respData,
+		srvData,
+		actionMux,
+	)
 
 	srv := &http.Server{
 		Addr:              opts.ListenAddr,
@@ -307,7 +202,7 @@ func main() {
 		Handler:           loggingMux,
 		// Called when the http server starts listening
 		BaseContext: func(l net.Listener) context.Context {
-			codec.ParseListener(l, srvData)
+			extractor.NetListener(l, srvData)
 
 			// Now we're listening, print server info
 			op.ListenInfo(srvData)
@@ -320,7 +215,7 @@ func main() {
 
 			requestNo++ // Think everything is single-threaded...
 			b.TraceWithName("tcp", "Accepting connection", "number", requestNo)
-			codec.ParseNetConn(c, requestNo, reqData)
+			extractor.NetConn(c, requestNo, reqData)
 
 			return ctx
 		},
@@ -337,7 +232,7 @@ func main() {
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				b.TraceWithName("tls", "ClientHello received, proposing TLS config")
 
-				codec.ParseTlsClientHello(hi, reqData)
+				extractor.TlsClientHello(hi, reqData)
 
 				// TODO: is TLSConfig how we stop it suggesting ciphers/whatever so old that Go's own client rejects them?
 				return nil, nil // option to bail handshake or change TLSConfig
@@ -363,7 +258,7 @@ func main() {
 			VerifyConnection: func(cs tls.ConnectionState) error {
 				b.TraceWithName("tls", "Connection parameter validation")
 
-				codec.ParseTlsConnectionState(&cs, reqData)
+				extractor.TlsConnectionState(&cs, reqData)
 
 				return nil // can inspect all connection and TLS info and reject
 			},
