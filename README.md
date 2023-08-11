@@ -1,8 +1,8 @@
 # http-log
 
 [![build](https://github.com/mt-inside/http-log/actions/workflows/test.yaml/badge.svg)](https://github.com/mt-inside/http-log/actions/workflows/test.yaml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/mt-inside/http-log//pkg.go.dev/github.com/mt-inside/http-log)
-[![Go Report Card](https://goreportcard.com/badge/github.com/mt-inside/http-log//goreportcard.com/report/github.com/mt-inside/http-log)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mt-inside/http-log.svg)](https://pkg.go.dev/github.com/mt-inside/http-log)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mt-inside/http-log)](https://goreportcard.com/report/github.com/mt-inside/http-log)
 
 ## Stand-alone Daemon
 
