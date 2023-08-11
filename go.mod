@@ -11,8 +11,8 @@ require (
 	github.com/kr/pretty v0.1.0
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mattn/go-isatty v0.0.19
+	github.com/mt-inside/go-jwks v0.2.0
 	github.com/mt-inside/go-usvc v0.0.7
-	github.com/mt-inside/pem2jwks v0.1.0
 )
 
 require (
