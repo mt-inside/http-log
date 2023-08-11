@@ -23,7 +23,7 @@ lint:
 	golangci-lint run ./... # TODO: --enable-all
 
 test: lint
-	go test ./...
+	go test ./... -race -covermode=atomic -coverprofile=coverage.out
 
 render-mod-graph:
 	go mod graph | modgraphviz | dot -Tpng -o mod_graph.png
