@@ -29,9 +29,7 @@ func init() {
 	certCache = make(map[string]*tls.Certificate)
 }
 
-func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
-
-	log = log.WithName("GenCertPair")
+func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
 	if len(settings.DNSNames) > 1 {
 		panic(errors.New("only support one SAN atm"))
@@ -168,6 +166,10 @@ func GenCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 
 func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
 
+	log = log.WithName("pki")
+
+	log.V(1).Info("Generating ca cert")
+
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
 			CommonName: "http-log self-signed CA",
@@ -181,12 +183,14 @@ func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return GenCertPair(log, caSettings, nil, algo)
+	return genCertPair(log, caSettings, nil, algo)
 }
 
 func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
-	log.V(1).Info("TLS: get serving cert callback")
+	log = log.WithName("pki")
+
+	log.V(1).Info("Generating serving cert")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
@@ -208,5 +212,5 @@ func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return GenCertPair(log, servingSettings, parent, algo)
+	return genCertPair(log, servingSettings, parent, algo)
 }
