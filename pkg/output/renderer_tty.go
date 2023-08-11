@@ -242,6 +242,8 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 
 // HeadFull prints full contents of the application-layer request header
 func (o TtyRenderer) HeadFull(d *state.RequestData) {
+	// TODO: share this fn with header printing in print-cert::responseData.Print
+
 	fmt.Printf(
 		"%s HTTP/%s vhost %s | %s %s\n",
 		o.s.Info(getTimestamp()),
@@ -269,14 +271,11 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Println("No Headers")
 	}
 	// TODO: make a renderOptinoalArray that does the Info(<none>) if it's empty, and takes a style and prints that for list items (only) using the normal renderColoredList()
-	// TODO: Truncate header values (even for Full), have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
-	// TODO: truncate to max(72, terminal width)
-	// TODO: when all that is done, share with header printing in print-cert::responseData.Print
 	for k, vs := range d.HttpHeaders {
 		for _, v := range vs {
 			// We deliberately "unfold" headers with multiple values, however they're sent on the wire (which the library doesn't let us see), as it's easier to read.
-			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(v))
-			// TODO: truncate value of Cookie, as it's rendered in full below
+			// TODO: truncate values, as they can be long (esp Cookie)
+			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(o.s.Truncate(v)))
 		}
 	}
 	if len(d.HttpHeaders) == 0 {
@@ -295,13 +294,13 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 			val = string(b64)
 			decoded = " (decoded base64)"
 		}
-		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(val))
+		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(o.s.Truncate(val)))
 	}
 
 	if d.AuthOIDC {
 		fmt.Printf("OIDC\n")
 		fmt.Printf("\tDiscovery: IdToken sig algos %s; Supported claims %s\n", o.s.List(d.AuthOIDCDiscoSupportedSigs, NounStyle), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)))
-		fmt.Printf("\tExtra Userinfo: %s\n", o.s.Map(d.AuthOIDCUserinfo, NounStyle))
+		fmt.Printf("\tExtra Userinfo (%s/%s): %s\n", o.s.Number(len(d.AuthOIDCUserinfo)), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)), o.s.Map(d.AuthOIDCUserinfo, NounStyle))
 	}
 
 	if d.AuthJwt != nil {
