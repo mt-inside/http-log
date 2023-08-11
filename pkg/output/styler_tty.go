@@ -12,8 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/logrusorgru/aurora/v3"
 
-	"github.com/mt-inside/go-usvc"
-
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
@@ -22,6 +20,8 @@ type TtyStyler struct {
 }
 
 const (
+	printWidth = 80
+
 	timeFmt = "2006 Jan _2 15:04:05"
 
 	InfoStyle aurora.Color = aurora.BlackFg | aurora.BrightFg
@@ -246,6 +246,17 @@ func (s TtyStyler) YesErrorWarning(err error, warning bool) string {
 	return s.Fail("no: " + err.Error())
 }
 
+// TODO: fix: if str is styled, this chops off the styling end escape codes. Should panic if called with an styled string (search for the escape char). Really you want a diff type for styled strings to enforce this at compile time
+// TODO: ofc all this Truncate (and printlen in List and Map) stuff is bollocks. You don't know what other chars/indent are on that line. Should be rendering everything into the indenter, which should (at final print time) chop every resulting line to a given width (ideally reading the terminal's width)
+// - have a global --no-truncate option that applies here, to lists, etc (styler should be constructed over it).
+func (s TtyStyler) Truncate(str string) string {
+	l := len(str)
+	if l > printWidth {
+		return str[:printWidth] + "..."
+	}
+	return str
+}
+
 func (s TtyStyler) List(ins []string, style aurora.Color) string {
 	if len(ins) == 0 {
 		return s.au.Colorize("<none>", InfoStyle).String()
@@ -260,9 +271,8 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 			newPrintLen += len(", ")
 		}
 
-		// TODO better algo (it has a problem, think ;)
-		if newPrintLen > 80 {
-			b.WriteString(s.au.Colorize(in[:usvc.MinInt(80-printLen, len(in)-1)], style).String())
+		if newPrintLen > printWidth {
+			b.WriteString(s.au.Colorize(in[:printWidth-printLen], style).String())
 			b.WriteString("...")
 			break
 		}
