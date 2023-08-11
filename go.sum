@@ -23,10 +23,10 @@ github.com/logrusorgru/aurora/v3 v3.0.0 h1:R6zcoZZbvVcGMvDCKo45A9U/lzYyzl5NfYIvz
 github.com/logrusorgru/aurora/v3 v3.0.0/go.mod h1:vsR12bk5grlLvLXAYrBsb5Oc/N+LxAlxggSjiwMnCUc=
 github.com/mattn/go-isatty v0.0.19 h1:JITubQf0MOLdlGRuRq+jtsDlekdYPia9ZFsB8h/APPA=
 github.com/mattn/go-isatty v0.0.19/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+github.com/mt-inside/go-jwks v0.2.0 h1:ADMMLXEpcva/xt7REu8RvoqMldBAZBR0uFchFQfGOXk=
+github.com/mt-inside/go-jwks v0.2.0/go.mod h1:aZzoqwn/TL39COkSIIySz+3MErO58EtEbbu2kxIhNP4=
 github.com/mt-inside/go-usvc v0.0.7 h1:fRkg084Yg2laZ3c8ny1FgTrGZS38VLWEdKIIiXykzHo=
 github.com/mt-inside/go-usvc v0.0.7/go.mod h1:TuNBFFihKEkU9VYgI0zBvd0uZ+xYvQynSUp/qlSl+NU=
-github.com/mt-inside/pem2jwks v0.1.0 h1:sle1rhwzShmPF9Q2Wa3DwIOVzniL/oxIAy+GbXgri9I=
-github.com/mt-inside/pem2jwks v0.1.0/go.mod h1:PQOx9ie1mj/WO8ujzmfS3gjQW3Nd4kr9TGHJqTWgqq8=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

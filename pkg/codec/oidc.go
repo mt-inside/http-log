@@ -12,7 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kr/pretty"
 
-	"github.com/mt-inside/pem2jwks/pkg/jwks"
+	"github.com/mt-inside/go-jwks"
 
 	"github.com/mt-inside/http-log/pkg/state"
 )
@@ -137,7 +137,7 @@ func TryFetchOIDCInfo(d *state.RequestData) (found bool, token *jwt.Token, token
 	if err != nil {
 		return
 	}
-	pubKeys, err := jwks.JSON2PublicKeys(jwksBytes)
+	pubKeys, err := jwks.JWKS2KeysMap(jwksBytes)
 	if err != nil {
 		fmt.Println(err)
 		return
