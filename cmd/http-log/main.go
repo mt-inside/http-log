@@ -53,7 +53,7 @@ func main() {
 	// X The OG place that accepts the http request cooks up a ctxt, with a timeout (cause we're now doing net i/o etc) - THIS IS CONN_CONTEXT!
 	// * put any request metadata that you want to appear as log pairs in there (conn no)
 	// X * new up reqData and respData and put them in there (pointers) - we've had trouble with these objects being reused, this should cure that
-	// * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
+	// X * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
 	// Config is a global, cause it's a singleton.
 	// * BUT: people prolly shouldn't access it direct, they should access srvData, so leave it where it is
 	// srvData is a function of the http.Server, so stuff it in there - in via BaseContext, out via r.Context() - check!
@@ -229,12 +229,6 @@ func main() {
 		actionMux,
 	)
 
-	type hackStoreData struct {
-		*state.RequestData
-		*state.ResponseData
-	}
-	hackStore := map[net.Addr]hackStoreData{}
-
 	srv := &http.Server{
 		Addr:              opts.ListenAddr,
 		ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
@@ -264,7 +258,7 @@ func main() {
 
 			requestNo++ // Think everything is single-threaded... TODO really can't assume that.
 			ctx = telemetry.KeyValuesToContext(ctx, "request", requestNo)
-			log := log.With(telemetry.KeyValuesFromContext(ctx))
+			log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 			log.Info("Accepting tcp connection") // TODO: these needs to use "tcp" / "http"-scoped loggers. The fact they don't have them tells you they shouldn't be here, prolly should in extractors?
 			extractor.NetConn(c, requestNo, reqData)
 
@@ -275,12 +269,14 @@ func main() {
 			if _, found := hackStore[c.RemoteAddr()]; found {
 				panic("Assumption broken: remoteAddr reused")
 			}
-			hackStore[c.RemoteAddr()] = hackStoreData{reqData, respData}
+			hackStore[c.RemoteAddr()] = ctx
 
 			return ctx
 		},
 		// Called when an http server connection changes state
 		ConnState: func(c net.Conn, cs http.ConnState) {
+			_, log := fromHackStore(c, log)
+
 			log.Info("Connection state change", "state", cs)
 		},
 	}
@@ -289,15 +285,11 @@ func main() {
 		srv.TLSConfig = &tls.Config{
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
+				ctx, log := fromHackStore(hi.Conn, log)
+
 				log.Info("TLS ClientHello received, proposing TLS config")
 
-				// extract from a (locked) global based on remoteaddr, panic if they're reused
-				// then this is to return the other funcs (rather than specifying them at init time), and they close over the reqData
-				pair, found := hackStore[hi.Conn.RemoteAddr()]
-				if !found {
-					panic("Couldn't find req/respData in hack store")
-				}
-				reqData := pair.RequestData
+				reqData := ctxt.ReqDataFromContext(ctx)
 
 				extractor.TlsClientHello(hi, reqData)
 
@@ -344,4 +336,17 @@ func main() {
 		b.Unwrap(srv.ListenAndServe())
 		log.Info("Server shutting down")
 	}
+}
+
+var hackStore = map[net.Addr]context.Context{}
+
+func fromHackStore(c net.Conn, log telemetry.Logger) (context.Context, telemetry.Logger) {
+	// TODO lock me
+	ctx, found := hackStore[c.RemoteAddr()]
+	if !found {
+		panic("Couldn't find req/respData in hack store")
+	}
+	logOut := log.With(telemetry.KeyValuesFromContext(ctx)...)
+
+	return ctx, logOut
 }

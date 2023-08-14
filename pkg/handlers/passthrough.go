@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tetratelabs/telemetry"
+
 	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
@@ -40,11 +42,14 @@ func NewPassthroughHandler(
 	return &passthroughHandler{url, daemonData}
 }
 
-func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+
 	log.Debug("PassthroughHandler::ServeHTTP()")
 
-	reqData := ctxt.ReqDataFromHTTPRequest(req)
-	respData := ctxt.RespDataFromHTTPRequest(req)
+	reqData := ctxt.ReqDataFromContext(r.Context())
+	respData := ctxt.RespDataFromContext(r.Context())
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -74,12 +79,12 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	if ph.url != nil {
 		/* Designated passthrough target */
-		req.URL = ph.url
+		r.URL = ph.url
 	} else {
 		/* Auto-passthrough mode */
-		if req.URL.Host != "" { // HTTP request line has a host in it (not looking at Host header)
+		if r.URL.Host != "" { // HTTP request line has a host in it (not looking at Host header)
 			/* We're being used as a proper proxy */
-			if req.Method != "CONNECT" {
+			if r.Method != "CONNECT" {
 				/* Proxying to HTTP, works ok */
 				/* HTTP_PROXY set; Req URL http://... */
 			} else {
@@ -103,38 +108,38 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 			* Note that if the user hasn't overridden it, it'll be set to whatever URL they used to call us, meaning we'll try to call ourself, and probably infinite loop?
 			* TODO: try to detect this and kill it (http-logs might be chained, so looking for our own user agent in Via won't cut it. Mint an instance UUID at startup and put in x-http-log-instance header?)
 			 */
-			req.URL.Scheme = "https"
-			if req.Header.Get("x-scheme") != "" {
-				req.URL.Scheme = req.Header.Get("x-scheme")
+			r.URL.Scheme = "https"
+			if r.Header.Get("x-scheme") != "" {
+				r.URL.Scheme = r.Header.Get("x-scheme")
 			}
 			// TODO: support connecting to custom ports too (x-port)
-			req.URL.Host = req.Host
+			r.URL.Host = r.Host
 		}
 	}
 	// TODO: is it an issue that LoggMiddle's read the body already? Test with a request body from the original client
-	respData.PassthroughURL = req.URL
+	respData.PassthroughURL = r.URL
 
 	/* Clear non-forward headers */
 
-	req.RequestURI = "" // Can't be set on client requests
+	r.RequestURI = "" // Can't be set on client requests
 
 	for h := range perReqHeaders {
-		req.Header.Del(h)
+		r.Header.Del(h)
 	}
 
 	/* Add to xff */
 
-	xff := req.Header.Get("x-forwarded-for")
+	xff := r.Header.Get("x-forwarded-for")
 	if xff != "" {
 		xff += ", " // A note on the space: this is one header value which is manipulated, not several values that have been "folded"
 	}
 	xff += reqData.TransportRemoteAddress.String()
-	req.Header.Set("x-forwarded-for", xff)
+	r.Header.Set("x-forwarded-for", xff)
 
 	/* Add to Forwarded */
 
 	// Forwaded: by=<incoming interface>;for=<caller>;host=<host it was looking for>;proto=<http|https>,...
-	fwd := req.Header.Get("forwarded")
+	fwd := r.Header.Get("forwarded")
 	if fwd != "" {
 		fwd += ","
 	}
@@ -145,19 +150,19 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		"proto=" + ph.daemonData.ServingProtocol(),
 	}
 	fwd += strings.Join(fwds, ";")
-	req.Header.Set("forwarded", fwd)
+	r.Header.Set("forwarded", fwd)
 
 	/* Add to Via */
 
 	// TODO: should this be set by forward proxies?
 	// Via: HTTP/1.1 proxy.foo.com:8080, <repeat>
 	// Via: 1.1 proxy.foo.com, <repeat> (proxy's name)
-	via := req.Header.Get("via")
+	via := r.Header.Get("via")
 	if via != "" {
 		via += ", "
 	}
 	via += reqData.HttpProtocolVersion + " " + utils.Hostname()
-	req.Header.Set("via", via)
+	r.Header.Set("via", via)
 
 	/* Send */
 
@@ -166,7 +171,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	// see: https://gist.github.com/yowu/f7dc34bd4736a65ff28d
 	// Also: calculate the hops array after we've done all this, ie the chain we print should include us and the upstream
 	respData.ProxyRequestTime = time.Now()
-	resp, err := client.Do(req)
+	resp, err := client.Do(r)
 	if err != nil {
 		// TODO: need to print err into the log somehow - error msg field on respData?
 		// - this goes hand-in-hand with not rendering unset fields, like body time and bytes

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tetratelabs/telemetry"
+
 	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/enricher"
 	"github.com/mt-inside/http-log/pkg/extractor"
@@ -33,9 +35,13 @@ func NewLogMiddle(
 
 /* This is your main driver func */
 func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+
 	log.Debug("LogMiddle::ServeHTTP()")
-	reqData := ctxt.ReqDataFromHTTPRequest(r)
-	respData := ctxt.RespDataFromHTTPRequest(r)
+
+	reqData := ctxt.ReqDataFromContext(ctx)
+	respData := ctxt.RespDataFromContext(ctx)
 
 	/* Record request info */
 
@@ -50,11 +56,11 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Parse & Enrich */
 
-	reqData.HttpHops = parser.Hops(reqData, lm.srvData)
-	reqData.AuthOIDC, _, reqData.AuthJwt, reqData.AuthJwtErr = enricher.OIDCInfo(reqData)
+	reqData.HttpHops = parser.Hops(ctx, reqData, lm.srvData)
+	reqData.AuthOIDC, _, reqData.AuthJwt, reqData.AuthJwtErr = enricher.OIDCInfo(ctx, reqData)
 	if !reqData.AuthOIDC {
 		// was no OIDC token, look for "normal" bearer ones
-		reqData.AuthJwt, reqData.AuthJwtErr = parser.JWT(r, lm.srvData.AuthJwtValidateKey)
+		reqData.AuthJwt, reqData.AuthJwtErr = parser.JWT(ctx, r, lm.srvData.AuthJwtValidateKey)
 	}
 
 	/* Print */
@@ -63,5 +69,5 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Done */
 
-	ctxt.CtxCancelFromHTTPRequest(r)()
+	ctxt.CtxCancelFromContext(ctx)()
 }

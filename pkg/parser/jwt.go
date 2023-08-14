@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"crypto"
 	"errors"
 	"net/http"
@@ -23,7 +24,7 @@ import (
 
 // ExtractAndParseJWT returns a JWT if one exists at all, else nil.
 // If one exists, any issues with it are documented in tokenErr
-func JWT(r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error) {
+func JWT(ctx context.Context, r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error) {
 
 	es := []jwtRequest.Extractor{
 		jwtRequest.AuthorizationHeaderExtractor, // Looks for `Authorization: Bearer foo`, strips the `Bearer`

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tetratelabs/telemetry"
+
 	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/codec"
@@ -19,9 +21,12 @@ func NewResponseHandler(status int, responseFormat string) http.Handler {
 }
 
 func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+
 	log.Debug("ResponseHandler::ServeHTTP()")
 
-	respData := ctxt.RespDataFromHTTPRequest(r)
+	respData := ctxt.RespDataFromContext(r.Context())
 
 	/* Header */
 

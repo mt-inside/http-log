@@ -3,7 +3,6 @@ package ctxt
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/mt-inside/http-log/pkg/state"
 )
@@ -14,9 +13,7 @@ var reqDataKey = tCtxKey("reqData")
 var respDataKey = tCtxKey("respData")
 var ctxCancelKey = tCtxKey("ctxCancel")
 
-func fromHTTPRequest(r *http.Request, key tCtxKey) any {
-	ctx := r.Context()
-
+func fromContext(ctx context.Context, key tCtxKey) any {
 	val := ctx.Value(key)
 	if val == nil {
 		panic(fmt.Errorf("can't find key %s in context", key))
@@ -33,12 +30,12 @@ func RespDataToContext(ctx context.Context, d *state.ResponseData) context.Conte
 func CtxCancelToContext(ctx context.Context, cancel context.CancelFunc) context.Context {
 	return context.WithValue(ctx, ctxCancelKey, cancel)
 }
-func ReqDataFromHTTPRequest(r *http.Request) *state.RequestData {
-	return fromHTTPRequest(r, reqDataKey).(*state.RequestData)
+func ReqDataFromContext(ctx context.Context) *state.RequestData {
+	return fromContext(ctx, reqDataKey).(*state.RequestData)
 }
-func RespDataFromHTTPRequest(r *http.Request) *state.ResponseData {
-	return fromHTTPRequest(r, respDataKey).(*state.ResponseData)
+func RespDataFromContext(ctx context.Context) *state.ResponseData {
+	return fromContext(ctx, respDataKey).(*state.ResponseData)
 }
-func CtxCancelFromHTTPRequest(r *http.Request) context.CancelFunc {
-	return fromHTTPRequest(r, ctxCancelKey).(context.CancelFunc)
+func CtxCancelFromContext(ctx context.Context) context.CancelFunc {
+	return fromContext(ctx, ctxCancelKey).(context.CancelFunc)
 }
