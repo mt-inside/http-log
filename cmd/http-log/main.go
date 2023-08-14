@@ -49,24 +49,24 @@ func main() {
 	// do new logging
 	// X * find all GetLogger, stored logs, passed logs & kill. Go until go mod tidy doesn't want to pull in logr/zapr
 	// X * package-level log globals. Store in classes where they exist (enriching with instance-metadata)
-	// * stuff into ctxt where appropriates, pull out req no
+	// X * stuff into ctxt where appropriates, pull out req no
 	// X The OG place that accepts the http request cooks up a ctxt, with a timeout (cause we're now doing net i/o etc) - THIS IS CONN_CONTEXT!
-	// * put any request metadata that you want to appear as log pairs in there (conn no)
+	// X * put any request metadata that you want to appear as log pairs in there (conn no)
 	// X * new up reqData and respData and put them in there (pointers) - we've had trouble with these objects being reused, this should cure that
 	// X * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
 	// Config is a global, cause it's a singleton.
 	// * BUT: people prolly shouldn't access it direct, they should access srvData, so leave it where it is
 	// X srvData is a function of the http.Server, so stuff it in there - in via BaseContext, out via r.Context() - check!
-	// bios should have no log
-	// * look at where bios is: only main should be doing check&exit - libs should be logging (to iface) and returning errors
+	// X bios should have no log
+	// X * look at where bios is: only main should be doing check&exit - libs should be logging (to iface) and returning errors
 	// think about arch!
-	// * extractors should be dumb (just copy the right fields), to keep code simple fast readable
-	// * renderers should be dumb (so they don't duplicate logic) - they shouldn't be trying to parse things or checking any errors
-	// * that leaves some stage in the middle where we parse&enrich. That currently happens in LogMiddle::ServeHTTP. Move stuff from the other 2 stages here
-	// think about renderer owning bios owning styler etc.
-	// * is there a point to bios now the log's gone?
+	// X * extractors should be dumb (just copy the right fields), to keep code simple fast readable
+	// X * renderers should be dumb (so they don't duplicate logic) - they shouldn't be trying to parse things or checking any errors
+	// * that leaves some stage in the middle where we parse&enrich. That currently happens in LogMiddle::ServeHTTP.
+	// X think about renderer owning bios owning styler etc.
+	// X * is there a point to bios now the log's gone?
 	// think! We're aiming to get to the point of doing the pretty output.
-	// * that outptu alone should be sufficient for the user - everything they need to know about the request, but not necc how we got there
+	// * that output alone should be sufficient for the user - everything they need to know about the request, but not necc how we got there
 	// * We log along the way. tet/telemetry's levels are good:
 	//   * debug: help me understand the app's state, generating self-signed cert
 	//   * info: something happened you might wanna know about, but it won't be in the end output (prolly very few of these, but eg all the stuff about fetching oidc, accepting connection)
@@ -77,6 +77,7 @@ func main() {
 	//   * main: arg issues etc - print & quit. Bios helps alleviate the tedium of this
 	//   * <intermediate> - no printing. Logging only. Any errors logged (if they mean we've had processing issues, AND we won't print them at the end) or saved, if they're error-typed info (eg your JWT is expired)
 	//   * output: at this point things should be parsed, there should literaly be no errors to check for.
+	// * We only panic when: assumptions are broken (if we ever hit a panic, we add error check & handle logic)
 
 	log := log.NewFlattened()
 	scope.UseLogger(log)

@@ -21,6 +21,7 @@ func TlsClientHello(hi *tls.ClientHelloInfo, d *state.RequestData) {
 func TlsConnectionState(cs *tls.ConnectionState, d *state.RequestData) {
 	d.TlsAgreedTime = time.Now()
 	if cs.ServerName != d.TlsServerName {
+		// This is here (extractors are normally dumb), but if this ever goes off an assumption is broken (that stdlib will abort for us), then we'll save cs.ServerName, check & warn in the renderer
 		panic(fmt.Errorf("established TLS connection's ServerName '%s' != ClientHello's '%s'", cs.ServerName, d.TlsServerName))
 	}
 	d.TlsClientCerts = cs.PeerCertificates
