@@ -12,23 +12,19 @@ import (
 	"github.com/mt-inside/http-log/pkg/extractor"
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/parser"
-	"github.com/mt-inside/http-log/pkg/state"
 )
 
 type LogMiddle struct {
-	op      output.Renderer
-	srvData *state.DaemonData
-	next    http.Handler
+	op   output.Renderer
+	next http.Handler
 }
 
 func NewLogMiddle(
 	op output.Renderer,
-	srvData *state.DaemonData,
 	next http.Handler,
 ) http.Handler {
 	return &LogMiddle{
 		op,
-		srvData,
 		next,
 	}
 }
@@ -40,12 +36,13 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Debug("LogMiddle::ServeHTTP()")
 
+	srvData := ctxt.SrvDataFromContext(ctx)
 	reqData := ctxt.ReqDataFromContext(ctx)
 	respData := ctxt.RespDataFromContext(ctx)
 
 	/* Record request info */
 
-	extractor.HttpRequest(r, lm.srvData, reqData)
+	extractor.HttpRequest(r, srvData, reqData)
 
 	reqData.HttpBody, reqData.HttpBodyErr = io.ReadAll(r.Body)
 	reqData.HttpBodyTime = time.Now()
@@ -56,16 +53,16 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Parse & Enrich */
 
-	reqData.HttpHops = parser.Hops(ctx, reqData, lm.srvData)
+	reqData.HttpHops = parser.Hops(ctx, reqData, srvData)
 	reqData.AuthOIDC, _, reqData.AuthJwt, reqData.AuthJwtErr = enricher.OIDCInfo(ctx, reqData)
 	if !reqData.AuthOIDC {
 		// was no OIDC token, look for "normal" bearer ones
-		reqData.AuthJwt, reqData.AuthJwtErr = parser.JWT(ctx, r, lm.srvData.AuthJwtValidateKey)
+		reqData.AuthJwt, reqData.AuthJwtErr = parser.JWT(ctx, r, srvData.AuthJwtValidateKey)
 	}
 
 	/* Print */
 
-	lm.op.Output(lm.srvData, reqData, respData)
+	lm.op.Output(srvData, reqData, respData)
 
 	/* Done */
 

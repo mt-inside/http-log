@@ -56,7 +56,7 @@ func main() {
 	// X * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
 	// Config is a global, cause it's a singleton.
 	// * BUT: people prolly shouldn't access it direct, they should access srvData, so leave it where it is
-	// srvData is a function of the http.Server, so stuff it in there - in via BaseContext, out via r.Context() - check!
+	// X srvData is a function of the http.Server, so stuff it in there - in via BaseContext, out via r.Context() - check!
 	// bios should have no log
 	// * look at where bios is: only main should be doing check&exit - libs should be logging (to iface) and returning errors
 	// think about arch!
@@ -225,7 +225,6 @@ func main() {
 
 	loggingMux := handlers.NewLogMiddle(
 		op,
-		srvData,
 		actionMux,
 	)
 
@@ -243,7 +242,10 @@ func main() {
 			// Now we're listening, print server info
 			op.ListenInfo(srvData)
 
-			return context.Background()
+			ctx := context.Background()
+			ctx = ctxt.SrvDataToContext(ctx, srvData)
+
+			return ctx
 		},
 		// Called when the http server accepts an incoming connection
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
