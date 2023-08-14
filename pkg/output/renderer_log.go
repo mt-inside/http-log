@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/mt-inside/http-log/pkg/build"
+	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
