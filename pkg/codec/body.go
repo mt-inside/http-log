@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
@@ -19,11 +20,12 @@ import (
 // GetBody generates the standard structured response
 func GetBody() map[string]string {
 	return map[string]string{
-		"logged": "ok",
-		"by":     "http-log",
-		"at":     time.Now().Format(time.RFC3339Nano),
-		"host":   utils.Hostname(),
-		"ip":     utils.DefaultIP(),
+		"logged":  "ok",
+		"by":      build.Name,
+		"version": build.Version,
+		"at":      time.Now().Format(time.RFC3339Nano),
+		"host":    utils.Hostname(),
+		"ip":      utils.DefaultIP(),
 	}
 }
 
@@ -46,12 +48,13 @@ func BytesAndMime(respCode int, body map[string]string, typ string) (bytes []byt
 		mime = "application/json; charset=utf-8"
 	case "xml":
 		bytes, err = xml.Marshal(
-			// TODO: build this by reflection
+			// TODO: build this by reflection and use all the fields from body
 			struct {
 				XMLName xml.Name `xml:"status"`
 				Logged  string
 				By      string
-			}{Logged: "ok", By: "http-log"},
+				Version string
+			}{Logged: "ok", By: build.Name, Version: build.Version},
 		)
 		mime = "application/xml"
 	default:

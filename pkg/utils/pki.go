@@ -13,9 +13,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"time"
+
+	"github.com/mt-inside/http-log/internal/build"
 )
 
 var (
@@ -170,7 +173,7 @@ func GenSelfSignedCa(algo string) (*tls.Certificate, error) {
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: "http-log self-signed CA", // TODO: from build info
+			CommonName: fmt.Sprintf("%s self-signed CA", build.Name),
 		},
 		DNSNames:              []string{"ca"},
 		NotBefore:             time.Now(),
@@ -195,7 +198,7 @@ func GenServingCert(helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, alg
 
 	servingSettings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: "http-log",
+			CommonName: build.Name,
 		},
 		DNSNames: []string{dnsName},
 		// IPAddresses:    []net.IP{net.IPv4(1, 2, 3, 4)},
