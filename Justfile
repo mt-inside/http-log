@@ -11,9 +11,11 @@ ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 
 install-tools:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install golang.org/x/tools/cmd/goimports@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install golang.org/x/exp/cmd/...@latest
+	go install github.com/kisielk/godepgraph@latest
 
 lint:
 	gofmt -s -w .
