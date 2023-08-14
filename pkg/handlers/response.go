@@ -5,21 +5,23 @@ import (
 	"time"
 
 	"github.com/mt-inside/http-log/internal/build"
+	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/codec"
-	"github.com/mt-inside/http-log/pkg/state"
 )
 
 type responseHandler struct {
 	status         int    // stdlib has no special type for this
 	responseFormat string // TODO: should be handled internally as an enum
-	respData       *state.ResponseData
 }
 
-func NewResponseHandler(status int, responseFormat string, respData *state.ResponseData) http.Handler {
-	return &responseHandler{status, responseFormat, respData}
+func NewResponseHandler(status int, responseFormat string) http.Handler {
+	return &responseHandler{status, responseFormat}
 }
 
 func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Debug("ResponseHandler::ServeHTTP()")
+
+	respData := ctxt.RespDataFromHTTPRequest(r)
 
 	/* Header */
 
@@ -31,16 +33,16 @@ func (rh responseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("location", "https://httpbin.org/status/302")
 	}
 	w.WriteHeader(rh.status)
-	rh.respData.HttpHeaderTime = time.Now()
-	rh.respData.HttpStatusCode = rh.status
+	respData.HttpHeaderTime = time.Now()
+	respData.HttpStatusCode = rh.status
 
 	/* Body */
 
 	n, _ := w.Write(bytes)
-	rh.respData.HttpBodyTime = time.Now()
-	rh.respData.HttpContentLength = int64(len(bytes))
-	rh.respData.HttpContentType = mime
-	rh.respData.HttpBody = bytes
-	rh.respData.HttpBodyLen = int64(n)
+	respData.HttpBodyTime = time.Now()
+	respData.HttpContentLength = int64(len(bytes))
+	respData.HttpContentType = mime
+	respData.HttpBody = bytes
+	respData.HttpBodyLen = int64(n)
 	// TODO: do an op if n != content-length header. Don't bail out though - best effort is what we want for this
 }

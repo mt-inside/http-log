@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
@@ -30,20 +31,20 @@ var perReqHeaders = map[string]bool{
 type passthroughHandler struct {
 	url        *url.URL
 	daemonData *state.DaemonData
-	reqData    *state.RequestData
-	respData   *state.ResponseData
 }
 
 func NewPassthroughHandler(
 	url *url.URL,
 	daemonData *state.DaemonData,
-	reqData *state.RequestData,
-	respData *state.ResponseData,
 ) http.Handler {
-	return &passthroughHandler{url, daemonData, reqData, respData}
+	return &passthroughHandler{url, daemonData}
 }
 
 func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Debug("PassthroughHandler::ServeHTTP()")
+
+	reqData := ctxt.ReqDataFromHTTPRequest(req)
+	respData := ctxt.RespDataFromHTTPRequest(req)
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -51,8 +52,8 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 				dialer := &net.Dialer{}
 				conn, err := dialer.DialContext(ctx, network, address)
 				if err == nil {
-					ph.respData.PassthroughLocalAddress = conn.LocalAddr()
-					ph.respData.PassthroughRemoteAddress = conn.RemoteAddr()
+					respData.PassthroughLocalAddress = conn.LocalAddr()
+					respData.PassthroughRemoteAddress = conn.RemoteAddr()
 				}
 				return conn, err
 			},
@@ -86,8 +87,8 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 				/* HTTP_PROXY set; Req URL httpS://... */
 				// TODO: maybe we should actually set up the tunnel - how complicated are the semantics of CONNECT? In this case, we can log the CONNECT headers and tunnel rx/tx byte counts I guess
 				http.Error(w, "CONNECT tunneling not supported", http.StatusBadGateway)
-				ph.respData.HttpHeaderTime = time.Now()
-				ph.respData.HttpStatusCode = http.StatusBadGateway
+				respData.HttpHeaderTime = time.Now()
+				respData.HttpStatusCode = http.StatusBadGateway
 				return
 				// FIXME:
 				// - run: go run ./cmd/http-log -P -R -M
@@ -111,7 +112,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		}
 	}
 	// TODO: is it an issue that LoggMiddle's read the body already? Test with a request body from the original client
-	ph.respData.PassthroughURL = req.URL
+	respData.PassthroughURL = req.URL
 
 	/* Clear non-forward headers */
 
@@ -127,7 +128,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if xff != "" {
 		xff += ", " // A note on the space: this is one header value which is manipulated, not several values that have been "folded"
 	}
-	xff += ph.reqData.TransportRemoteAddress.String()
+	xff += reqData.TransportRemoteAddress.String()
 	req.Header.Set("x-forwarded-for", xff)
 
 	/* Add to Forwarded */
@@ -138,9 +139,9 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		fwd += ","
 	}
 	fwds := []string{
-		"by=" + ph.reqData.TransportLocalAddress.String(),
-		"for=" + ph.reqData.TransportRemoteAddress.String(),
-		"host=" + ph.reqData.HttpHost,
+		"by=" + reqData.TransportLocalAddress.String(),
+		"for=" + reqData.TransportRemoteAddress.String(),
+		"host=" + reqData.HttpHost,
 		"proto=" + ph.daemonData.ServingProtocol(),
 	}
 	fwd += strings.Join(fwds, ";")
@@ -155,7 +156,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if via != "" {
 		via += ", "
 	}
-	via += ph.reqData.HttpProtocolVersion + " " + utils.Hostname()
+	via += reqData.HttpProtocolVersion + " " + utils.Hostname()
 	req.Header.Set("via", via)
 
 	/* Send */
@@ -164,15 +165,15 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	// TODO: we're currently running stealth; we should actually announce ourselves with xff etc as we're active at L7
 	// see: https://gist.github.com/yowu/f7dc34bd4736a65ff28d
 	// Also: calculate the hops array after we've done all this, ie the chain we print should include us and the upstream
-	ph.respData.ProxyRequestTime = time.Now()
+	respData.ProxyRequestTime = time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		// TODO: need to print err into the log somehow - error msg field on respData?
 		// - this goes hand-in-hand with not rendering unset fields, like body time and bytes
 		// - good test-case is cold-boot http-log, then get it to forward to https with invalid cert
 		http.Error(w, fmt.Sprintf("Error forwarding request: %v", err), http.StatusBadGateway)
-		ph.respData.HttpHeaderTime = time.Now()
-		ph.respData.HttpStatusCode = http.StatusBadGateway
+		respData.HttpHeaderTime = time.Now()
+		respData.HttpStatusCode = http.StatusBadGateway
 		return
 	}
 	defer resp.Body.Close()
@@ -198,22 +199,22 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if respVia != "" {
 		respVia += ", "
 	}
-	respVia += ph.reqData.HttpProtocolVersion + " " + utils.Hostname()
+	respVia += reqData.HttpProtocolVersion + " " + utils.Hostname()
 	w.Header().Set("via", respVia)
 	// TODO: should any other forwarded-style headers be set by reverse proxies?
 
 	/* Status */
 
 	w.WriteHeader(resp.StatusCode)
-	ph.respData.HttpHeaderTime = time.Now()
-	ph.respData.HttpStatusCode = resp.StatusCode
+	respData.HttpHeaderTime = time.Now()
+	respData.HttpStatusCode = resp.StatusCode
 
 	/* Body */
 
 	n, _ := io.Copy(w, resp.Body) // Nothing we can really do about these errors cause the headers have been send. Client has to detect them from diff content-length vs body read
-	ph.respData.HttpBodyTime = time.Now()
-	ph.respData.HttpContentLength = resp.ContentLength
-	ph.respData.HttpContentType = resp.Header.Get("Content-Type")
-	ph.respData.HttpBodyLen = n
+	respData.HttpBodyTime = time.Now()
+	respData.HttpContentLength = resp.ContentLength
+	respData.HttpContentType = resp.Header.Get("Content-Type")
+	respData.HttpBodyLen = n
 	// TODO: do an op if n != content-length header. Don't bail out though - best effort is what we want for this
 }

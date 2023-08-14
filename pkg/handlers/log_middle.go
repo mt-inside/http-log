@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/enricher"
 	"github.com/mt-inside/http-log/pkg/extractor"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -13,24 +14,18 @@ import (
 )
 
 type LogMiddle struct {
-	op       output.Renderer
-	reqData  *state.RequestData
-	respData *state.ResponseData
-	srvData  *state.DaemonData
-	next     http.Handler
+	op      output.Renderer
+	srvData *state.DaemonData
+	next    http.Handler
 }
 
 func NewLogMiddle(
 	op output.Renderer,
-	reqData *state.RequestData,
-	respData *state.ResponseData,
 	srvData *state.DaemonData,
 	next http.Handler,
 ) http.Handler {
 	return &LogMiddle{
 		op,
-		reqData,
-		respData,
 		srvData,
 		next,
 	}
@@ -38,28 +33,35 @@ func NewLogMiddle(
 
 /* This is your main driver func */
 func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Debug("LogMiddle::ServeHTTP()")
+	reqData := ctxt.ReqDataFromHTTPRequest(r)
+	respData := ctxt.RespDataFromHTTPRequest(r)
 
 	/* Record request info */
 
-	extractor.HttpRequest(r, lm.srvData, lm.reqData)
+	extractor.HttpRequest(r, lm.srvData, reqData)
 
-	lm.reqData.HttpBody, lm.reqData.HttpBodyErr = io.ReadAll(r.Body)
-	lm.reqData.HttpBodyTime = time.Now()
+	reqData.HttpBody, reqData.HttpBodyErr = io.ReadAll(r.Body)
+	reqData.HttpBodyTime = time.Now()
 
-	/* Next */
+	/* Next - our "action" handler */
 
 	lm.next.ServeHTTP(w, r)
 
 	/* Parse & Enrich */
 
-	lm.reqData.HttpHops = parser.Hops(lm.reqData, lm.srvData)
-	lm.reqData.AuthOIDC, _, lm.reqData.AuthJwt, lm.reqData.AuthJwtErr = enricher.OIDCInfo(lm.reqData)
-	if !lm.reqData.AuthOIDC {
+	reqData.HttpHops = parser.Hops(reqData, lm.srvData)
+	reqData.AuthOIDC, _, reqData.AuthJwt, reqData.AuthJwtErr = enricher.OIDCInfo(reqData)
+	if !reqData.AuthOIDC {
 		// was no OIDC token, look for "normal" bearer ones
-		lm.reqData.AuthJwt, lm.reqData.AuthJwtErr = parser.JWT(r, lm.srvData.AuthJwtValidateKey)
+		reqData.AuthJwt, reqData.AuthJwtErr = parser.JWT(r, lm.srvData.AuthJwtValidateKey)
 	}
 
 	/* Print */
 
-	lm.op.Output(lm.srvData, lm.reqData, lm.respData)
+	lm.op.Output(lm.srvData, reqData, respData)
+
+	/* Done */
+
+	ctxt.CtxCancelFromHTTPRequest(r)()
 }
