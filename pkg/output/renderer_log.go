@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/mt-inside/go-usvc"
 
 	"github.com/mt-inside/http-log/pkg/build"
+	"github.com/mt-inside/http-log/pkg/utils"
 )
 
 // LogRenderer is an output implementation that logs using zapr
@@ -155,7 +155,7 @@ func (o LogRenderer) JWTFull(tokenErr error, warning bool, start, end *time.Time
 func (o LogRenderer) BodySummary(contentType string, contentLength int64, bs []byte) {
 	log := o.log.WithName("HTTP")
 	bodyLen := len(bs)
-	printLen := usvc.MinInt(bodyLen, 72)
+	printLen := min(bodyLen, 72)
 
 	log.Info("Body",
 		"len", contentLength,
