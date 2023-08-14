@@ -86,6 +86,11 @@ import (
 func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 
+	if ctx.Err() != nil {
+		log.Info("Not fetching any OIDC info", "reason", ctx.Err())
+		return false, ctx.Err(), nil, nil
+	}
+
 	cookie := d.HttpCookies["IdToken"]
 	if cookie == nil {
 		return false, nil, nil, nil
@@ -116,9 +121,6 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	// Discovery Document
 	// ===
 
-	// TODO: timeout of 0 means don't fetch this stuff at all (print as much)
-	// default timeout thus say 10s?
-
 	oidcIdP, err := token.Claims.GetIssuer()
 	if err != nil {
 		log.Error("can't get issuer from token", err)
@@ -130,14 +132,13 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 		return true, err, token, nil
 	}
 	oidcClient := &http.Client{}
-	oidcDiscoRequest, err := http.NewRequestWithContext(ctx, "GET", oidcDiscoURI, nil) // TODO: timeout, configurable, keep cancel
+	oidcDiscoRequest, err := http.NewRequestWithContext(ctx, "GET", oidcDiscoURI, nil)
 	if err != nil {
 		log.Error("can't construct HTTP request for OIDC Discovery Document", err)
 		return true, err, token, nil
 	}
 	oidcDiscoRequest.Header.Set("User-Agent", build.NameAndVersion())
 	oidcDiscoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
-	// TODO: debug. Make a struct to pass around containing { s, b, log }
 	log.Info("Fetching OIDC Discovery Document", "url", oidcDiscoURI)
 	oidcDiscoResp, err := oidcClient.Do(oidcDiscoRequest)
 	if err != nil {
