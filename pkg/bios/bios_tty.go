@@ -1,7 +1,6 @@
 package bios
 
 import (
-	"errors"
 	"fmt"
 	"os"
 

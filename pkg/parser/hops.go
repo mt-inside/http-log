@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -12,7 +13,7 @@ import (
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
-func Hops(r *state.RequestData, s *state.DaemonData) []*state.Hop {
+func Hops(ctx context.Context, r *state.RequestData, s *state.DaemonData) []*state.Hop {
 
 	firstClientAgent := r.HttpHeaders.Get("User-Agent")
 

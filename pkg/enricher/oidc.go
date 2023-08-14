@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/tetratelabs/telemetry"
 
 	"github.com/mt-inside/go-jwks"
 
@@ -81,7 +82,9 @@ import (
 //   Userinfo: email foo(noun) name "bar baz"(noun)
 
 // TODO: shouldn't return the IdToken as token, it's authN / access token metadata; should build one from the userinfo, cause that's the authz info. Or probably add userinfo into it (return a map not a Token) - flow has to work for "proper" jwt bearer tokens too
-func OIDCInfo(d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
+func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
+	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+
 	cookie := d.HttpCookies["IdToken"]
 	if cookie == nil {
 		return false, nil, nil, nil
@@ -126,7 +129,7 @@ func OIDCInfo(d *state.RequestData) (found bool, err error, token *jwt.Token, to
 		return true, err, token, nil
 	}
 	oidcClient := &http.Client{}
-	oidcDiscoRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDiscoURI, nil) // TODO: timeout, configurable, keep cancel
+	oidcDiscoRequest, err := http.NewRequestWithContext(ctx, "GET", oidcDiscoURI, nil) // TODO: timeout, configurable, keep cancel
 	if err != nil {
 		log.Error("can't construct HTTP request for OIDC Discovery Document", err)
 		return true, err, token, nil
@@ -164,7 +167,7 @@ func OIDCInfo(d *state.RequestData) (found bool, err error, token *jwt.Token, to
 	// Userinfo
 	// ===
 
-	oidcUserinfoRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDisco["userinfo_endpoint"].(string), nil)
+	oidcUserinfoRequest, err := http.NewRequestWithContext(ctx, "GET", oidcDisco["userinfo_endpoint"].(string), nil)
 	if err != nil {
 		log.Error("can't construct HTTP request for OIDC Userinfo", err)
 		return true, err, token, nil
@@ -197,7 +200,7 @@ func OIDCInfo(d *state.RequestData) (found bool, err error, token *jwt.Token, to
 	// Public Keys
 	// ===
 
-	oidcJWKSRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDisco["jwks_uri"].(string), nil)
+	oidcJWKSRequest, err := http.NewRequestWithContext(ctx, "GET", oidcDisco["jwks_uri"].(string), nil)
 	if err != nil {
 		log.Error("can't construct HTTP request for OIDC JWKS", err)
 		return true, err, token, nil
