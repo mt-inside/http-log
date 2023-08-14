@@ -101,6 +101,7 @@ MELANGE := "melange"
 APKO    := "apko"
 
 melange: test
+	{{MELANGE}} bump melange.yaml {{TAGD}}
 	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
