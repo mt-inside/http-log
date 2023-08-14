@@ -1,12 +1,12 @@
 package:
   name: http-log
-  # TODO: take as arg or something
-  version: 0.7.13
+  epoch: 0
+  version: v0.7.13-32-g043aab4-dirty
   description: Logs HTTP requests
   copyright:
-    - paths: ["*"]
+    - paths:
+        - "*"
       license: Apache-2.0
-
 environment:
   contents:
     keyring:
@@ -17,7 +17,6 @@ environment:
       - wolfi-base
       - build-base
       - go
-
 pipeline:
   - name: Build
     runs: |
