@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mt-inside/http-log/pkg/build"
+	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/state"
 )

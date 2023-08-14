@@ -9,6 +9,7 @@ TAG := `git describe --tags --abbrev`
 TAGD := `git describe --tags --abbrev --dirty`
 ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
+LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
 
 install-tools:
 	go install golang.org/x/tools/cmd/goimports@latest
@@ -36,47 +37,47 @@ render-pkg-graph:
 build: test
 	# Use CGO here, like in the container, so this binary is pretty representative.
 	# Don't statically link though, as that's a nightmare on all possible dev machines.
-	go build -a -ldflags "-X 'github.com/mt-inside/http-log/pkg/build.Version="{{TAGD}}"'" ./cmd/http-log
+	go build -a {{LD_COMMON}} ./cmd/http-log
 
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
 
 run-daemon *ARGS: test
-	go run ./cmd/http-log -K=ecdsa {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -K=ecdsa {{ARGS}}
 
 run-daemon-mtls-jwt *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -l -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -l -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -l -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -l -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-mtls-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -l -n -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -l -n -t -m -b -r -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -l -n -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -l -n -t -m -b -r -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-mtls-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -L -N -T -M -B -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -L -N -T -M -B -R -k=../print-cert/ssl/server-key.pem -c=../print-cert/ssl/server-cert.pem -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-mtls-self-sign-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-proxy-mtls-self-sign-jwt-all-summaries *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -L -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -p http://localhost:8888 -L -n -t -m -b -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 run-daemon-proxy-mtls-self-sign-jwt-all-fulls *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
-	go run ./cmd/http-log -p http://localhost:8888 -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -p http://localhost:8888 -L -N -T -M -B -R -K=ecdsa -C=../print-cert/ssl/client-ca-cert.pem -j=/Users/matt/work/personal/talks/istio-demo-master/41/pki/public.pem {{ARGS}}
 
 run-daemon-proxy-backend *ARGS: test
-	go run ./cmd/http-log -a localhost:8888 -L -t -M -b -r {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -a localhost:8888 -L -t -M -b -r {{ARGS}}
 run-daemon-proxy-backend-all-fulls *ARGS: test
-	go run ./cmd/http-log -a localhost:8888 -L -T -M -B -R {{ARGS}}
+	go run {{LD_COMMON}} ./cmd/http-log -a localhost:8888 -L -T -M -B -R {{ARGS}}
 
 
 run-daemon-docker: package-docker
