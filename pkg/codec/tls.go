@@ -47,7 +47,6 @@ func HeadFromCertificate(cert *tls.Certificate) *x509.Certificate {
 	c, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		// Assume that if we have the bytes in a tls.Certificate struct that they parse, might not be true
-		// NB: can't use output.Bios in this package; it doesn't output
 		panic(fmt.Errorf("cert doesn't parse: %w", err))
 	}
 	return c
@@ -58,7 +57,6 @@ func ChainFromCertificate(tlsCert *tls.Certificate) (x509Certs []*x509.Certifica
 		x509Cert, err := x509.ParseCertificate(tlsBytes)
 		if err != nil {
 			// Assume that if we have the bytes in a tls.Certificate struct that they parse, might not be true
-			// NB: can't use output.Bios in this package; it doesn't output
 			panic(fmt.Errorf("cert doesn't parse: %w", err))
 		}
 		x509Certs = append(x509Certs, x509Cert)

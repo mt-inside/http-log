@@ -15,7 +15,11 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
+	"github.com/tetratelabs/log"
+	"github.com/tetratelabs/telemetry"
+	"github.com/tetratelabs/telemetry/scope"
 
+	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/extractor"
 	"github.com/mt-inside/http-log/pkg/handlers"
@@ -40,6 +44,42 @@ var requestNo uint64
 
 // TODO: cobra + viper(? - go-flags is really nice)
 func main() {
+
+	// do new logging
+	// * find all GetLogger, stored logs, passed logs & kill. Go until go mod tidy doesn't want to pull in logr/zapr
+	// * package-level log globals. Store in classes where they exist (enriching with instance-metadata)
+	// * stuff into ctxt where appropriates
+	// The OG place that accepts the http request cooks up a ctxt, with a timeout (cause we're now doing net i/o etc) - THIS IS CONN_CONTEXT!
+	// * put any request metadata that you want to appear as log pairs in there (conn no)
+	// * new up reqData and respData and put them in there (pointers) - we've had trouble with these objects being reused, this should cure that
+	// * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
+	// Config is a global, cause it's a singleton.
+	// * BUT: people prolly shouldn't access it direct, they should access srvData, so leave it where it is
+	// srvData is a function of the http.Server, so stuff it in there - in via BaseContext, out via r.Context() - check!
+	// bios should have no log
+	// * look at where bios is: only main should be doing check&exit - libs should be logging (to iface) and returning errors
+	// think about arch!
+	// * extractors should be dumb (just copy the right fields), to keep code simple fast readable
+	// * renderers should be dumb (so they don't duplicate logic) - they shouldn't be trying to parse things or checking any errors
+	// * that leaves some stage in the middle where we parse&enrich. That currently happens in LogMiddle::ServeHTTP. Move stuff from the other 2 stages here
+	// think about renderer owning bios owning styler etc.
+	// * is there a point to bios now the log's gone?
+	// think! We're aiming to get to the point of doing the pretty output.
+	// * that outptu alone should be sufficient for the user - everything they need to know about the request, but not necc how we got there
+	// * We log along the way. tet/telemetry's levels are good:
+	//   * debug: help me understand the app's state, generating self-signed cert
+	//   * info: something happened you might wanna know about, but it won't be in the end output (prolly very few of these, but eg all the stuff about fetching oidc, accepting connection)
+	//   * error: something happened *that we can't gracefully recover from* - this is something that means we have to stop processing and you'll get an incomplete result at the end
+	//   * note that we also deal with error objects a lot (like cert expired) - they don't stop us processing, they're just how that (exceptional) info is returned
+	//     * We don't error-log these; we store them and render them later. Those fields are prolly best called "FooReason"
+	// * To recap: we only print in
+	//   * main: arg issues etc - print & quit. Bios helps alleviate the tedium of this
+	//   * <intermediate> - no printing. Logging only. Any errors logged (if they mean we've had processing issues, AND we won't print them at the end) or saved, if they're error-typed info (eg your JWT is expired)
+	//   * output: at this point things should be parsed, there should literaly be no errors to check for.
+
+	log := log.NewFlattened()
+	scope.UseLogger(log)
+	scope.SetAllScopes(telemetry.LevelDebug)
 
 	/* == Parse and grok arguments == */
 
@@ -80,35 +120,6 @@ func main() {
 		}
 	}
 
-	//var s output.TtyStyler // TODO iface when log styler
-	var b output.Bios
-	var op output.Renderer
-	switch opts.Output {
-	case "text":
-		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
-		b = output.NewTtyBios(s, 10)
-		op = output.NewTtyRenderer(s)
-	case "pretty":
-		s := output.NewTtyStyler(aurora.NewAurora(true)) // color
-		// TODO: verbosity option
-		b = output.NewTtyBios(s, 10)
-		op = output.NewTtyRenderer(s)
-	case "json":
-		// TODO: verbosity option
-		//l := usvc.GetLogger(false, 0)
-		//b = output.NewLogBios(l)
-		//op = output.NewLogRenderer(l) //FIXME
-
-		// for now
-		s := output.NewTtyStyler(aurora.NewAurora(false))
-		b = output.NewTtyBios(s, 0)
-		op = output.NewTtyRenderer(s)
-	default:
-		panic(errors.New("bottom"))
-	}
-
-	op.Version()
-
 	if !opts.ConnectionSummary && !opts.ConnectionFull &&
 		!opts.NegotiationSummary && !opts.NegotiationFull &&
 		!opts.TLSSummary && !opts.TLSFull &&
@@ -121,6 +132,36 @@ func main() {
 			opts.ResponseSummary = true
 		}
 	}
+
+	// We make one styler here (which is utility functions) and construct Bios and Renderer over it.
+	// However, they're very different. Renderer outputs at the end. Bios is used here to remove the tedium of pre-flight checks.
+	var b bios.Bios
+	var op output.Renderer
+	switch opts.Output {
+	case "text":
+		s := output.NewTtyStyler(aurora.NewAurora(false)) // no color
+		b = bios.NewTtyBios(s)
+		op = output.NewTtyRenderer(s, opts.RendererOpts)
+	case "pretty":
+		s := output.NewTtyStyler(aurora.NewAurora(true)) // color
+		// TODO: verbosity option
+		b = bios.NewTtyBios(s)
+		op = output.NewTtyRenderer(s, opts.RendererOpts)
+	case "json":
+		// TODO: verbosity option
+		//l := usvc.GetLogger(false, 0)
+		//b = output.NewLogBios(l)
+		//op = output.NewLogRenderer(l) //FIXME
+
+		// for now
+		s := output.NewTtyStyler(aurora.NewAurora(false))
+		b = bios.NewTtyBios(s)
+		op = output.NewTtyRenderer(s, opts.RendererOpts)
+	default:
+		panic(errors.New("bottom"))
+	}
+
+	b.Version()
 
 	srvData := state.NewDaemonData()
 	reqData := state.NewRequestData()
@@ -159,7 +200,7 @@ func main() {
 
 		if opts.TLSAlgo != "off" {
 			srvData.TlsServingSelfSign = true
-			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(b.GetLogger(), opts.TLSAlgo)
+			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(opts.TLSAlgo)
 			b.Unwrap(err)
 		}
 	}
@@ -184,9 +225,7 @@ func main() {
 	}
 
 	loggingMux := handlers.NewLogMiddle(
-		b,
 		op,
-		opts.RendererOpts,
 		reqData,
 		respData,
 		srvData,
@@ -211,17 +250,17 @@ func main() {
 		},
 		// Called when the http server accepts an incoming connection
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			// Note: ctx has a bunch of info under context-key "http-server"
+			// TODO: ctx has a bunch of info under context-key "http-server"
 
-			requestNo++ // Think everything is single-threaded...
-			b.TraceWithName("tcp", "Accepting connection", "number", requestNo)
+			requestNo++                                               // Think everything is single-threaded... TODO really can't assume that.
+			log.Info("Accepting tcp connection", "number", requestNo) // TODO: these needs to use "tcp" / "http"-scoped loggers. The fact they don't have them tells you they shouldn't be here, prolly should in extractors?
 			extractor.NetConn(c, requestNo, reqData)
 
 			return ctx
 		},
 		// Called when an http server connection changes state
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			b.TraceWithName("http", "Connection state change", "state", cs)
+			log.Info("Connection state change", "state", cs)
 		},
 	}
 
@@ -230,7 +269,7 @@ func main() {
 			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
-				b.TraceWithName("tls", "ClientHello received, proposing TLS config")
+				log.Info("TLS ClientHello received, proposing TLS config")
 
 				extractor.TlsClientHello(hi, reqData)
 
@@ -238,25 +277,25 @@ func main() {
 				return nil, nil // option to bail handshake or change TLSConfig
 			},
 			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				b.TraceWithName("tls", "Asked for serving cert")
+				log.Info("TLS Asked for serving cert")
 				if srvData.TlsServingSelfSign {
-					b.TraceWithName("tls", "Generating self-signed serving cert")
-					cert, err := utils.GenServingCert(b.GetLogger(), hi, srvData.TlsServingCertPair, opts.TLSAlgo)
+					log.Info("Generating self-signed serving cert")
+					cert, err := utils.GenServingCert(hi, srvData.TlsServingCertPair, opts.TLSAlgo)
 					if err == nil {
 						reqData.TlsNegServerCert = cert
 					}
 					return cert, err
 				}
 
-				b.TraceWithName("tls", "Returning configured serving cert")
+				log.Info("Returning configured serving cert")
 				return srvData.TlsServingCertPair, nil
 			},
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				b.TraceWithName("tls", "Built-in cert verification finished (no-op)")
+				log.Info("Built-in cert verification finished (no-op)")
 				return nil // can do extra cert verification and reject
 			},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				b.TraceWithName("tls", "Connection parameter validation")
+				log.Info("Connection parameter validation")
 
 				extractor.TlsConnectionState(&cs, reqData)
 
@@ -264,9 +303,9 @@ func main() {
 			},
 		}
 		b.Unwrap(srv.ListenAndServeTLS("", ""))
-		b.Trace("Server shutting down")
+		log.Info("Server shutting down")
 	} else {
 		b.Unwrap(srv.ListenAndServe())
-		b.Trace("Server shutting down")
+		log.Info("Server shutting down")
 	}
 }

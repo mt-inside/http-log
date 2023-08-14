@@ -7,8 +7,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	jwtRequest "github.com/golang-jwt/jwt/v5/request"
-
-	"github.com/mt-inside/http-log/pkg/output"
 )
 
 /* This jwt library is bullshit.
@@ -25,7 +23,7 @@ import (
 
 // ExtractAndParseJWT returns a JWT if one exists at all, else nil.
 // If one exists, any issues with it are documented in tokenErr
-func JWT(b output.Bios, r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error) {
+func JWT(r *http.Request, validateKey crypto.PublicKey) (token *jwt.Token, tokenErr error) {
 
 	es := []jwtRequest.Extractor{
 		jwtRequest.AuthorizationHeaderExtractor, // Looks for `Authorization: Bearer foo`, strips the `Bearer`

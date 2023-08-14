@@ -8,12 +8,11 @@ import (
 
 	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
 
-func Hops(b output.Bios, r *state.RequestData, s *state.DaemonData) []*state.Hop {
+func Hops(r *state.RequestData, s *state.DaemonData) []*state.Hop {
 
 	firstClientAgent := r.HttpHeaders.Get("User-Agent")
 

@@ -16,8 +16,6 @@ import (
 	"math/big"
 	"sync"
 	"time"
-
-	"github.com/go-logr/logr"
 )
 
 var (
@@ -29,19 +27,19 @@ func init() {
 	certCache = make(map[string]*tls.Certificate)
 }
 
-func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func genCertPair(settings *x509.Certificate, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
 	if len(settings.DNSNames) > 1 {
 		panic(errors.New("only support one SAN atm"))
 	}
 
 	name := settings.DNSNames[0]
-	log = log.WithValues("name", name)
+	log := log.With("name", name)
 
 	certCacheLock.Lock()
 	if cert, ok := certCache[name]; ok {
 		x509Cert, _ := x509.ParseCertificate(cert.Certificate[0])
-		log.V(1).Info("Returning from cert cache", "serial", x509Cert.SerialNumber)
+		log.Debug("Returning from cert cache", "serial", x509Cert.SerialNumber)
 		certCacheLock.Unlock()
 		return cert, nil
 	}
@@ -166,15 +164,13 @@ func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 	return &pair, err
 }
 
-func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
+func GenSelfSignedCa(algo string) (*tls.Certificate, error) {
 
-	log = log.WithName("pki")
-
-	log.V(1).Info("Generating ca cert")
+	log.Debug("Generating ca cert")
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: "http-log self-signed CA",
+			CommonName: "http-log self-signed CA", // TODO: from build info
 		},
 		DNSNames:              []string{"ca"},
 		NotBefore:             time.Now(),
@@ -185,14 +181,12 @@ func GenSelfSignedCa(log logr.Logger, algo string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	return genCertPair(log, caSettings, nil, algo)
+	return genCertPair(caSettings, nil, algo)
 }
 
-func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func GenServingCert(helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
 
-	log = log.WithName("pki")
-
-	log.V(1).Info("Generating serving cert")
+	log.Debug("Generating serving cert")
 
 	dnsName := "localhost"
 	if helloInfo.ServerName != "" {
@@ -214,5 +208,5 @@ func GenServingCert(log logr.Logger, helloInfo *tls.ClientHelloInfo, parent *tls
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return genCertPair(log, servingSettings, parent, algo)
+	return genCertPair(servingSettings, parent, algo)
 }
