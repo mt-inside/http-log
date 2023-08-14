@@ -137,6 +137,8 @@ func genCertPair(log logr.Logger, settings *x509.Certificate, parent *tls.Certif
 			return nil, err
 		}
 
+	// x25519 it not applicable because it's a key-exchange protocol not a signing one
+
 	default:
 		panic(errors.New("bottom"))
 	}
