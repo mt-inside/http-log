@@ -63,10 +63,10 @@ func (o LogRenderer) TLSNegFull(hi *tls.ClientHelloInfo) {
 	o.TLSNegSummary(hi)
 
 	log := o.log.WithName("TLS")
-	log.Info("Supported", "versions", TLSVersions2Strings(hi.SupportedVersions))
-	log.Info("Supported", "cert types", Slice2Strings(hi.SignatureSchemes))
-	log.Info("Supported", "cert curves", Slice2Strings(hi.SupportedCurves))
-	log.Info("Supported", "symmetric cypher suites", CipherSuites2Strings(hi.CipherSuites))
+	log.Info("Supported", "versions", utils.Map(hi.SupportedVersions, tls.VersionName))
+	log.Info("Supported", "cert types", utils.MapToString(hi.SignatureSchemes))
+	log.Info("Supported", "cert curves", utils.MapToString(hi.SupportedCurves))
+	log.Info("Supported", "symmetric cypher suites", utils.Map(hi.CipherSuites, tls.CipherSuiteName))
 	log.Info("Supported", "ALPN protocols", hi.SupportedProtos)
 }
 
@@ -76,7 +76,7 @@ func (o LogRenderer) TLSSummary(cs *tls.ConnectionState, clientCa *x509.Certific
 	log.Info(
 		"Agreed",
 		"sni", cs.ServerName,
-		"version", TLSVersionName(cs.Version),
+		"version", tls.VersionName(cs.Version),
 		"alpn", cs.NegotiatedProtocol,
 	)
 
