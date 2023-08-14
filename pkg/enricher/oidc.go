@@ -14,6 +14,7 @@ import (
 
 	"github.com/mt-inside/go-jwks"
 
+	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
@@ -134,7 +135,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 		log.Error("can't construct HTTP request for OIDC Discovery Document", err)
 		return true, err, token, nil
 	}
-	oidcDiscoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
+	oidcDiscoRequest.Header.Set("User-Agent", build.NameAndVersion())
 	oidcDiscoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	// TODO: debug. Make a struct to pass around containing { s, b, log }
 	log.Info("Fetching OIDC Discovery Document", "url", oidcDiscoURI)
@@ -173,7 +174,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 		return true, err, token, nil
 	}
 	// TODO factor out with above
-	oidcUserinfoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
+	oidcUserinfoRequest.Header.Set("User-Agent", build.NameAndVersion())
 	oidcUserinfoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	log.Info("Fetching OIDC Userinfo", "url", oidcUserinfoRequest.URL)
 	oidcUserinfoResp, err := oidcClient.Do(oidcUserinfoRequest)
@@ -206,7 +207,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 		return true, err, token, nil
 	}
 	// TODO factor out with above
-	oidcJWKSRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
+	oidcJWKSRequest.Header.Set("User-Agent", build.NameAndVersion())
 	oidcJWKSRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	log.Info("Fetching OIDC JWKS", "url", oidcJWKSRequest.URL)
 	oidcJWKSResp, err := oidcClient.Do(oidcJWKSRequest)
