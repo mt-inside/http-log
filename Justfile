@@ -10,8 +10,10 @@ TAGD := `git describe --tags --abbrev --dirty`
 ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
+MELANGE := "melange"
+APKO    := "apko"
 
-install-tools:
+tools-install:
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -42,6 +44,46 @@ build: test
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
+
+package: test
+	{{MELANGE}} bump melange.yaml {{TAGD}}
+	{{MELANGE}} keygen
+	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
+
+image-local:
+	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
+	docker load < http-log.tar
+image-publish:
+	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
+	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}}
+image-publish-no-certs:
+	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
+	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs
+cosign-sign:
+	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
+	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
+
+image-ls:
+	hub-tool tag ls --platforms {{REPO}}
+image-inspect:
+	docker buildx imagetools inspect {{REPO}}:{{TAG}}
+sbom-show:
+	docker sbom {{REPO}}:{{TAG}}
+snyk:
+	snyk test .
+	snyk container test {{REPO}}:{{TAG}}
+cosign-verify:
+	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
+
+clean:
+	rm -rf coverage.out
+	rm -rf mod_graph.png pkg_graph.png
+	rm -rf packages/
+	rm -rf sbom-*
+	rm -rf http-log.tar
+
+run-daemon-image:
+	docker run -ti -p8080:8080 {{REPO}}:{{TAG}}
 
 run-daemon *ARGS: test
 	go run {{LD_COMMON}} ./cmd/http-log -K=ecdsa {{ARGS}}
@@ -78,55 +120,3 @@ run-daemon-proxy-backend *ARGS: test
 	go run {{LD_COMMON}} ./cmd/http-log -a localhost:8888 -L -t -M -b -r {{ARGS}}
 run-daemon-proxy-backend-all-fulls *ARGS: test
 	go run {{LD_COMMON}} ./cmd/http-log -a localhost:8888 -L -T -M -B -R {{ARGS}}
-
-
-run-daemon-docker: package-docker
-	docker run -ti -p8080:8080 {{REPO}}:{{TAG}}
-
-package-docker:
-	docker buildx build --build-arg VERSION={{TAGD}} -t {{REPO}}:{{TAG}} -t {{REPO}}:latest --load .
-publish-docker:
-	docker buildx build --platform={{ARCHS}} -t {{REPO}}:{{TAG}} -t {{REPO}}:latest --push .
-
-docker-ls:
-	hub-tool tag ls --platforms {{REPO}}
-docker-inspect:
-	docker buildx imagetools inspect {{REPO}}:{{TAG}}
-
-snyk:
-	snyk test .
-	snyk container test {{REPO}}:{{TAG}}
-
-MELANGE := "melange"
-APKO    := "apko"
-
-melange: test
-	{{MELANGE}} bump melange.yaml {{TAGD}}
-	# keypair to verify the package between melange and apko. apko will very quietly refuse to find our apk if these args aren't present
-	{{MELANGE}} keygen
-	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
-package-cgr: #melange
-	{{APKO}} build --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}} http-log.tar
-	docker load < http-log.tar
-publish-cgr: #melange
-	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
-	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{REPO}}:{{TAG}}
-publish-cgr-no-certs: #melange
-	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
-	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko-no-certs.yaml {{REPO}}:{{TAG}}-no-certs
-
-sbom-show:
-	docker sbom {{REPO}}:{{TAG}}
-
-cosign-sign:
-	# Experimental includes pushing the signature to a Rekor transparency log, default: rekor.sigstore.dev
-	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
-cosign-verify:
-	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
-
-clean:
-	rm -rf coverage.out
-	rm -rf mod_graph.png pkg_graph.png
-	rm -rf packages/
-	rm -rf sbom-*
-	rm -rf http-log.tar
