@@ -1,7 +1,7 @@
 package:
   name: http-log
   epoch: 0
-  version: v0.7.13-32-g043aab4-dirty
+  version: v0.7.14-dirty
   description: Logs HTTP requests
   copyright:
     - paths:
