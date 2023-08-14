@@ -123,3 +123,10 @@ cosign-sign:
 	COSIGN_EXPERIMENTAL=1 cosign sign {{REPO}}:{{TAG}}
 cosign-verify:
 	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
+
+clean:
+	rm -rf coverage.out
+	rm -rf mod_graph.png pkg_graph.png
+	rm -rf packages/
+	rm -rf sbom-*
+	rm -rf http-log.tar
