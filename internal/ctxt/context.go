@@ -9,6 +9,7 @@ import (
 
 type tCtxKey string
 
+var srvDataKey = tCtxKey("srvData")
 var reqDataKey = tCtxKey("reqData")
 var respDataKey = tCtxKey("respData")
 var ctxCancelKey = tCtxKey("ctxCancel")
@@ -21,6 +22,9 @@ func fromContext(ctx context.Context, key tCtxKey) any {
 	return val
 }
 
+func SrvDataToContext(ctx context.Context, d *state.DaemonData) context.Context {
+	return context.WithValue(ctx, srvDataKey, d)
+}
 func ReqDataToContext(ctx context.Context, d *state.RequestData) context.Context {
 	return context.WithValue(ctx, reqDataKey, d)
 }
@@ -29,6 +33,10 @@ func RespDataToContext(ctx context.Context, d *state.ResponseData) context.Conte
 }
 func CtxCancelToContext(ctx context.Context, cancel context.CancelFunc) context.Context {
 	return context.WithValue(ctx, ctxCancelKey, cancel)
+}
+
+func SrvDataFromContext(ctx context.Context) *state.DaemonData {
+	return fromContext(ctx, srvDataKey).(*state.DaemonData)
 }
 func ReqDataFromContext(ctx context.Context) *state.RequestData {
 	return fromContext(ctx, reqDataKey).(*state.RequestData)
