@@ -19,6 +19,7 @@ import (
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 
+	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/extractor"
@@ -46,12 +47,12 @@ var requestNo uint64
 func main() {
 
 	// do new logging
-	// * find all GetLogger, stored logs, passed logs & kill. Go until go mod tidy doesn't want to pull in logr/zapr
-	// * package-level log globals. Store in classes where they exist (enriching with instance-metadata)
-	// * stuff into ctxt where appropriates
-	// The OG place that accepts the http request cooks up a ctxt, with a timeout (cause we're now doing net i/o etc) - THIS IS CONN_CONTEXT!
+	// X * find all GetLogger, stored logs, passed logs & kill. Go until go mod tidy doesn't want to pull in logr/zapr
+	// X * package-level log globals. Store in classes where they exist (enriching with instance-metadata)
+	// * stuff into ctxt where appropriates, pull out req no
+	// X The OG place that accepts the http request cooks up a ctxt, with a timeout (cause we're now doing net i/o etc) - THIS IS CONN_CONTEXT!
 	// * put any request metadata that you want to appear as log pairs in there (conn no)
-	// * new up reqData and respData and put them in there (pointers) - we've had trouble with these objects being reused, this should cure that
+	// X * new up reqData and respData and put them in there (pointers) - we've had trouble with these objects being reused, this should cure that
 	// * extract it in ServeHTTP with r.Context(), and pass this into the tree of functions (the handler func is the root function) - this repalced logging etc
 	// Config is a global, cause it's a singleton.
 	// * BUT: people prolly shouldn't access it direct, they should access srvData, so leave it where it is
@@ -164,18 +165,16 @@ func main() {
 	b.Version()
 
 	srvData := state.NewDaemonData()
-	reqData := state.NewRequestData()
-	respData := state.NewResponseData()
 
 	// TODO: mutex status/reply vs passtrhoughURL vs passthroughAuto - no more than 1. If none are set, use the defaults for status & response
-	var actionMux http.Handler = handlers.NewResponseHandler(opts.Status, opts.ResponseFormat, respData)
+	var actionMux http.Handler = handlers.NewResponseHandler(opts.Status, opts.ResponseFormat)
 	if opts.PassthroughURL != "" || opts.PassthroughAuto {
 		var url *url.URL = nil
 		if opts.PassthroughURL != "" {
 			url, err = url.Parse(opts.PassthroughURL)
 			b.Unwrap(err)
 		}
-		actionMux = handlers.NewPassthroughHandler(url, srvData, reqData, respData)
+		actionMux = handlers.NewPassthroughHandler(url, srvData)
 	}
 
 	srvData.TlsOn = false
@@ -226,11 +225,15 @@ func main() {
 
 	loggingMux := handlers.NewLogMiddle(
 		op,
-		reqData,
-		respData,
 		srvData,
 		actionMux,
 	)
+
+	type hackStoreData struct {
+		*state.RequestData
+		*state.ResponseData
+	}
+	hackStore := map[net.Addr]hackStoreData{}
 
 	srv := &http.Server{
 		Addr:              opts.ListenAddr,
@@ -252,9 +255,27 @@ func main() {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			// TODO: ctx has a bunch of info under context-key "http-server"
 
-			requestNo++                                               // Think everything is single-threaded... TODO really can't assume that.
-			log.Info("Accepting tcp connection", "number", requestNo) // TODO: these needs to use "tcp" / "http"-scoped loggers. The fact they don't have them tells you they shouldn't be here, prolly should in extractors?
+			var cancel context.CancelFunc
+			// Not sure if the ctx we get is cloned from BaseContext's one, but we clone it here anyway so no matter
+			ctx, cancel = context.WithTimeout(ctx, 10*time.Second) // TODO: configurable timeout. TODO: check for cancellation in places / use as ctx in http requests
+
+			reqData := state.NewRequestData()
+			respData := state.NewResponseData()
+
+			requestNo++ // Think everything is single-threaded... TODO really can't assume that.
+			ctx = telemetry.KeyValuesToContext(ctx, "request", requestNo)
+			log := log.With(telemetry.KeyValuesFromContext(ctx))
+			log.Info("Accepting tcp connection") // TODO: these needs to use "tcp" / "http"-scoped loggers. The fact they don't have them tells you they shouldn't be here, prolly should in extractors?
 			extractor.NetConn(c, requestNo, reqData)
+
+			ctx = ctxt.ReqDataToContext(ctx, reqData)
+			ctx = ctxt.RespDataToContext(ctx, respData)
+			ctx = ctxt.CtxCancelToContext(ctx, cancel)
+
+			if _, found := hackStore[c.RemoteAddr()]; found {
+				panic("Assumption broken: remoteAddr reused")
+			}
+			hackStore[c.RemoteAddr()] = hackStoreData{reqData, respData}
 
 			return ctx
 		},
@@ -266,40 +287,55 @@ func main() {
 
 	if srvData.TlsOn {
 		srv.TLSConfig = &tls.Config{
-			ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 			/* Hooks in order they're called */
 			GetConfigForClient: func(hi *tls.ClientHelloInfo) (*tls.Config, error) {
 				log.Info("TLS ClientHello received, proposing TLS config")
 
+				// extract from a (locked) global based on remoteaddr, panic if they're reused
+				// then this is to return the other funcs (rather than specifying them at init time), and they close over the reqData
+				pair, found := hackStore[hi.Conn.RemoteAddr()]
+				if !found {
+					panic("Couldn't find req/respData in hack store")
+				}
+				reqData := pair.RequestData
+
 				extractor.TlsClientHello(hi, reqData)
 
-				// TODO: is TLSConfig how we stop it suggesting ciphers/whatever so old that Go's own client rejects them?
-				return nil, nil // option to bail handshake or change TLSConfig
-			},
-			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				log.Info("TLS Asked for serving cert")
-				if srvData.TlsServingSelfSign {
-					log.Info("Generating self-signed serving cert")
-					cert, err := utils.GenServingCert(hi, srvData.TlsServingCertPair, opts.TLSAlgo)
-					if err == nil {
-						reqData.TlsNegServerCert = cert
-					}
-					return cert, err
+				// Close over this req/respData
+				cfg := &tls.Config{
+					ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
+					GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+						log.Info("TLS Asked for serving cert")
+						if srvData.TlsServingSelfSign {
+							log.Info("Generating self-signed serving cert")
+							cert, err := utils.GenServingCert(hi, srvData.TlsServingCertPair, opts.TLSAlgo)
+							if err == nil {
+								reqData.TlsNegServerCert = cert
+							}
+							return cert, err
+						}
+
+						log.Info("Returning configured serving cert")
+						return srvData.TlsServingCertPair, nil
+					},
+					VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+						log.Info("Built-in cert verification finished (no-op)")
+						return nil // can do extra cert verification and reject
+					},
+					VerifyConnection: func(cs tls.ConnectionState) error {
+						log.Info("Connection parameter validation")
+
+						extractor.TlsConnectionState(&cs, reqData)
+
+						return nil // can inspect all connection and TLS info and reject
+					},
 				}
 
-				log.Info("Returning configured serving cert")
-				return srvData.TlsServingCertPair, nil
+				return cfg, nil
 			},
-			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				log.Info("Built-in cert verification finished (no-op)")
-				return nil // can do extra cert verification and reject
-			},
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Info("Connection parameter validation")
-
-				extractor.TlsConnectionState(&cs, reqData)
-
-				return nil // can inspect all connection and TLS info and reject
+			// Have to provide a non-nil GetCertificate(), else ListenAndServeTLS() will try to open the paths you give it (and we have to give "")
+			GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				panic("I should never be called; TLS config should be overwritten by this point")
 			},
 		}
 		b.Unwrap(srv.ListenAndServeTLS("", ""))
