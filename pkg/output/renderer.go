@@ -18,7 +18,8 @@ type RendererOpts struct {
 }
 
 type Renderer interface {
-	Version()
+	Output(srvData *state.DaemonData, reqData *state.RequestData, respData *state.ResponseData)
+
 	ListenInfo(d *state.DaemonData)
 
 	// TODO: then start moving things around, eg Hops with connection, HSTS with TLS (is a print-cert thing but that needs the same treatment)

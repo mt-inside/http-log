@@ -13,12 +13,12 @@ import (
 // This layer exists so that different op "stages" can use info from other ones, eg printing HSTS header info with TLS stuff
 // TODO: However the reason it splits everything out like this is to provide compatibility with other server frameworks like lambda, CF workers, etc. This might prove to be a step too far to be useful, and maybe they all wanna have different outputters (in cmd/internal?) just sharing the stylers/biosen
 type RequestData struct {
-	TransportConnTime      *time.Time
+	TransportConnTime      time.Time
 	TransportConnNo        uint64 // TODO. Where should this state be held?
 	TransportRemoteAddress net.Addr
 	TransportLocalAddress  net.Addr // Note that this is not the same as the Server's TcpListenAddress, as that might be eg 0.0.0.0
 
-	TlsNegTime             *time.Time
+	TlsNegTime             time.Time
 	TlsNegServerCert       *tls.Certificate
 	TlsNegVersions         []uint16
 	TlsNegSignatureSchemes []tls.SignatureScheme
@@ -29,12 +29,12 @@ type RequestData struct {
 	TlsServerName  string
 	TlsClientCerts []*x509.Certificate
 
-	TlsAgreedTime        *time.Time
+	TlsAgreedTime        time.Time
 	TlsAgreedVersion     uint16
 	TlsAgreedCipherSuite uint16
 	TlsAgreedALPN        string
 
-	HttpRequestTime     *time.Time
+	HttpRequestTime     time.Time
 	HttpProtocolVersion string
 	HttpMethod          string
 
@@ -60,7 +60,8 @@ type RequestData struct {
 	AuthOIDCUserinfo             map[string]string
 	AuthOIDCJwks                 map[string]any
 
-	HttpBodyTime      *time.Time // When the body finished being read
+	HttpBodyTime      time.Time // When the body finished being read
+	HttpBodyErr       error
 	HttpContentLength int64
 	HttpContentType   string
 	HttpBody          []byte

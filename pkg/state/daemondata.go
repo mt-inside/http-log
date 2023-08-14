@@ -9,12 +9,12 @@ import (
 )
 
 type DaemonData struct {
-	TransportListenTime    *time.Time
+	TransportListenTime    time.Time
 	TransportListenAddress net.Addr
 
 	TlsOn              bool
 	TlsServingSelfSign bool
-	TlsServingCertPair *tls.Certificate // TODO why u a pointer?
+	TlsServingCertPair *tls.Certificate
 	TlsClientCA        *x509.Certificate
 
 	AuthJwtValidateKey crypto.PublicKey

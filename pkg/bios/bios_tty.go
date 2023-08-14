@@ -1,35 +1,27 @@
-package output
+package bios
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/go-logr/logr"
-
-	"github.com/mt-inside/go-usvc"
+	"github.com/mt-inside/http-log/pkg/build"
+	"github.com/mt-inside/http-log/pkg/output"
 )
 
 type TtyBios struct {
-	s   TtyStyler
-	log logr.Logger
+	s output.TtyStyler
 }
 
-func NewTtyBios(s TtyStyler, verbosity int) TtyBios {
-	// TODO: take verbosity level arg, use here
-	return TtyBios{s, usvc.GetLogger(false, verbosity).V(1)}
+func NewTtyBios(s output.TtyStyler) TtyBios {
+	return TtyBios{s}
 }
 
-// Using a logger is a nice way to get nice output for now. In future it could pretty print
-func (b TtyBios) Trace(msg string, keysAndValues ...interface{}) {
-	b.log.Info(msg, keysAndValues...)
-}
-func (b TtyBios) TraceWithName(name, msg string, keysAndValues ...interface{}) {
-	b.log.WithName(name).Info(msg, keysAndValues...)
-}
-
-// TODO to stderr. Also anti-pattern surely?
-func (b TtyBios) GetLogger() logr.Logger {
-	return b.log
+func (b TtyBios) Version() {
+	fmt.Printf(
+		"%s\n",
+		// TODO: build time
+		b.s.Noun(build.NameAndVersion()),
+	)
 }
 
 func (b TtyBios) PrintOk(msg string) {

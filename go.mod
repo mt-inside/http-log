@@ -8,16 +8,16 @@ require (
 	github.com/go-logr/logr v1.2.4
 	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/jessevdk/go-flags v1.5.0
-	github.com/kr/pretty v0.1.0
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mattn/go-isatty v0.0.19
 	github.com/mt-inside/go-jwks v0.2.0
 	github.com/mt-inside/go-usvc v0.0.7
+	github.com/tetratelabs/telemetry v0.7.5
 )
 
 require (
 	github.com/go-logr/zapr v1.2.4 // indirect
-	github.com/kr/text v0.1.0 // indirect
+	github.com/tetratelabs/log v0.2.3 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect

@@ -1,4 +1,4 @@
-package output
+package bios
 
 import (
 	"errors"
@@ -16,18 +16,6 @@ func NewLogBios(l logr.Logger) LogBios {
 }
 
 func (b LogBios) Banner(s string) {
-}
-
-func (b LogBios) Trace(msg string, keysAndValues ...interface{}) {
-	b.l.V(1).Info(msg, keysAndValues...)
-}
-func (b LogBios) TraceWithName(name, msg string, keysAndValues ...interface{}) {
-	b.l.WithName(name).V(1).Info(msg, keysAndValues...)
-}
-
-// TODO Same mechanism as Trace for now; this should write to stderr
-func (b LogBios) GetLogger() logr.Logger {
-	return b.l.V(2)
 }
 
 func (b LogBios) PrintInfo(msg string) {

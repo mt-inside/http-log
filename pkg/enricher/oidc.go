@@ -13,7 +13,6 @@ import (
 
 	"github.com/mt-inside/go-jwks"
 
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
 )
@@ -82,10 +81,10 @@ import (
 //   Userinfo: email foo(noun) name "bar baz"(noun)
 
 // TODO: shouldn't return the IdToken as token, it's authN / access token metadata; should build one from the userinfo, cause that's the authz info. Or probably add userinfo into it (return a map not a Token) - flow has to work for "proper" jwt bearer tokens too
-func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token, tokenErr error) {
+func OIDCInfo(d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
 	cookie := d.HttpCookies["IdToken"]
 	if cookie == nil {
-		return // found: false
+		return false, nil, nil, nil
 	}
 
 	// ===
@@ -94,18 +93,17 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 
 	parser := jwt.NewParser()
 
-	token, _, tokenErr = parser.ParseUnverified(
+	token, _, err = parser.ParseUnverified(
 		cookie.Value,
 		&jwt.RegisteredClaims{},
 	)
 
-	if errors.Is(tokenErr, jwt.ErrTokenMalformed) {
-		token = nil // Kinda horrible, but we're ok with errors (like expired), so even in the presense of an error we still deref the token. Thus we need to nil the token out (this is checked for later) in the cases the token struct isn't valid
-		return      // found: false
+	if errors.Is(err, jwt.ErrTokenMalformed) {
+		return false, nil, nil, err
 	}
 
 	// IdToken == OIDC
-	found = true // TODO: think about control flow. Can't be returning true with invlaid/nil token. But also want what token info we can get even all the complicated io below fails.
+	// TODO: think about control flow. Can't be returning true with invlaid/nil token. But also want what token info we can get even all the complicated io below fails.
 	// TODO: proposal. Put the disco/userinfo/jwks stuff in a fn, call it with a deadline. If it timesout or errors, it just doesn't return a jwks/extra userinfo/etc, and we take the ParseUnverified path just like jwt.go
 
 	// TODO: validate the claims, when validation function is public
@@ -118,37 +116,44 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 	// default timeout thus say 10s?
 
 	oidcIdP, err := token.Claims.GetIssuer()
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't get issuer from token", err)
+		return true, nil, token, err
 	}
 	oidcDiscoURI, err := url.JoinPath(oidcIdP, "/.well-known/openid-configuration")
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't form path for OIDC discovery document", err)
+		return true, err, token, nil
 	}
 	oidcClient := &http.Client{}
 	oidcDiscoRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDiscoURI, nil) // TODO: timeout, configurable, keep cancel
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't construct HTTP request for OIDC Discovery Document", err)
+		return true, err, token, nil
 	}
 	oidcDiscoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcDiscoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
 	// TODO: debug. Make a struct to pass around containing { s, b, log }
-	b.TraceWithName("oidc", "Fetching OIDC Discovery Document", "url", oidcDiscoURI)
+	log.Info("Fetching OIDC Discovery Document", "url", oidcDiscoURI)
 	oidcDiscoResp, err := oidcClient.Do(oidcDiscoRequest)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't fetch OIDC Discovery Docment", err)
+		return true, err, token, nil
 	}
 	defer oidcDiscoResp.Body.Close()
-	b.TraceWithName("oidc", "Fetched OIDC Discovery Document", "status", oidcDiscoResp.Status)
+	log.Info("Fetched OIDC Discovery Document", "status", oidcDiscoResp.Status)
 
 	if !(oidcDiscoResp.StatusCode >= 200 && oidcDiscoResp.StatusCode < 400) {
-		return // Nothing else we can do if we can't get the disco doc
+		err = fmt.Errorf("HTTP status: %s", oidcDiscoResp.Status)
+		log.Error("can't fetch OIDC Discovery Document", err)
+		return true, err, token, nil
 	}
 
 	oidcDisco := map[string]interface{}{} // TODO type this
 	err = json.NewDecoder(oidcDiscoResp.Body).Decode(&oidcDisco)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't decode OIDC Discovery Docment", err)
+		return true, err, token, nil
 	}
 	d.AuthOIDCDiscoSupportedClaims = utils.MapAnyToString(oidcDisco["claims_supported"].([]any))
 	d.AuthOIDCDiscoSupportedSigs = utils.MapAnyToString(oidcDisco["id_token_signing_alg_values_supported"].([]any))
@@ -160,26 +165,29 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 	// ===
 
 	oidcUserinfoRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDisco["userinfo_endpoint"].(string), nil)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't construct HTTP request for OIDC Userinfo", err)
+		return true, err, token, nil
 	}
 	// TODO factor out with above
 	oidcUserinfoRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcUserinfoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
-	b.TraceWithName("oidc", "Fetching OIDC Userinfo", "url", oidcUserinfoRequest.URL)
+	log.Info("Fetching OIDC Userinfo", "url", oidcUserinfoRequest.URL)
 	oidcUserinfoResp, err := oidcClient.Do(oidcUserinfoRequest)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't fetch OIDC Userinfo", err)
+		return true, err, token, nil
 	}
 	defer oidcUserinfoResp.Body.Close()
-	b.TraceWithName("oidc", "Fetched OIDC Userinfo", "status", oidcUserinfoResp.Status)
+	log.Info("Fetched OIDC Userinfo", "status", oidcUserinfoResp.Status)
 
 	if oidcUserinfoResp.StatusCode >= 200 && oidcUserinfoResp.StatusCode < 400 {
 		// TODO: deal with other possible userinfo type: JWT (indicated in mime), nested JWT (detected how?)
 		oidcUserinfo := map[string]string{} // TODO type this?
 		err = json.NewDecoder(oidcUserinfoResp.Body).Decode(&oidcUserinfo)
-		if b.CheckPrintErr(err) {
-			return
+		if err != nil {
+			log.Error("can't decode OIDC Userinfo", err)
+			return true, err, token, nil
 		}
 
 		d.AuthOIDCUserinfo = oidcUserinfo
@@ -190,43 +198,47 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 	// ===
 
 	oidcJWKSRequest, err := http.NewRequestWithContext(context.Background(), "GET", oidcDisco["jwks_uri"].(string), nil)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't construct HTTP request for OIDC JWKS", err)
+		return true, err, token, nil
 	}
 	// TODO factor out with above
 	oidcJWKSRequest.Header.Set("User-Agent", "http-log")                            // TODO from build info
 	oidcJWKSRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
-	b.TraceWithName("oidc", "Fetching OIDC JWKS", "url", oidcJWKSRequest.URL)
+	log.Info("Fetching OIDC JWKS", "url", oidcJWKSRequest.URL)
 	oidcJWKSResp, err := oidcClient.Do(oidcJWKSRequest)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't fetch OIDC JWKS", err)
+		return true, err, token, nil
 	}
 	defer oidcJWKSResp.Body.Close()
-	b.TraceWithName("oidc", "Fetched OIDC JWKS", "status", oidcJWKSResp.Status)
+	log.Info("Fetched OIDC JWKS", "status", oidcJWKSResp.Status)
 
 	jwksBytes, err := io.ReadAll(oidcJWKSResp.Body)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't read OIDC JWKS response body", err)
+		return true, err, token, nil
 	}
 	pubKeys, err := jwks.JWKS2KeysMap(jwksBytes)
-	if b.CheckPrintErr(err) {
-		return
+	if err != nil {
+		log.Error("can't decode OIDC JWKS", err)
+		return true, err, token, nil
 	}
 
 	d.AuthOIDCJwks = pubKeys
-	b.TraceWithName("oidc", "Parsed JWKS", "keys", len(pubKeys))
+	log.Info("Parsed JWKS", "keys", len(pubKeys))
 
 	// ===
 	// Re-parse now we have keys to verify with
 	// ===
 
-	token, tokenErr = parser.ParseWithClaims(
+	token, err = parser.ParseWithClaims(
 		cookie.Value,
 		&jwt.RegisteredClaims{},
 		func(token *jwt.Token) (interface{}, error) {
 			kid := token.Header["kid"].(string)
 			jwksKey, ok := pubKeys[kid]
-			b.TraceWithName("oidc", "Validaing JWT with JWKS key", "key_id", kid, "key_exists", ok)
+			log.Info("Validaing JWT with JWKS key", "key_id", kid, "key_exists", ok)
 			if !ok {
 				return nil, fmt.Errorf("have JWKS key bundle but it doesn't contain JWT's kid %s", kid)
 			}
@@ -234,5 +246,5 @@ func OIDCInfo(b output.Bios, d *state.RequestData) (found bool, token *jwt.Token
 		},
 	)
 
-	return
+	return true, nil, token, err
 }

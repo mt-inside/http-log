@@ -10,8 +10,7 @@ import (
 )
 
 func HttpRequest(r *http.Request, srvData *state.DaemonData, d *state.RequestData) {
-	now := time.Now()
-	d.HttpRequestTime = &now
+	d.HttpRequestTime = time.Now()
 	d.HttpProtocolVersion = fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)
 	d.HttpMethod = r.Method
 

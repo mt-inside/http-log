@@ -8,9 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/mt-inside/http-log/pkg/build"
 	"github.com/mt-inside/http-log/pkg/codec"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
@@ -51,36 +49,65 @@ import (
 * - maybe a logStyler which can eg have YesNo; timefmt; take a string list, limit len, aggregate or whatever for passing to logr
  */
 
-// TODO: use styler's timestamp functions
-func getTimestamp() string {
-	return time.Now().Format("15:04:05")
-}
-func fmtTimestamp(t *time.Time) string {
-	return t.Format("15:04:05")
-}
-
 // TtyRenderer is an output implementation that pretty-prints to a tty device
 type TtyRenderer struct {
-	s TtyStyler
+	s      TtyStyler
+	opOpts RendererOpts
 }
 
 // NewTtyRenderer returns a new outputter than pretty-prints to a tty device
-func NewTtyRenderer(s TtyStyler) TtyRenderer {
-	return TtyRenderer{s}
+func NewTtyRenderer(s TtyStyler, opOpts RendererOpts) TtyRenderer {
+	return TtyRenderer{s, opOpts}
 }
 
-func (o TtyRenderer) Version() {
-	fmt.Printf(
-		"%s %s\n",
-		o.s.Info(getTimestamp()),
-		o.s.Noun(build.NameAndVersion()),
-	)
+func (o TtyRenderer) Output(srvData *state.DaemonData, reqData *state.RequestData, respData *state.ResponseData) {
+	if o.opOpts.ConnectionSummary {
+		o.TransportSummary(reqData)
+	} else if o.opOpts.ConnectionFull {
+		o.TransportFull(reqData)
+	}
+
+	if srvData.TlsOn {
+		if o.opOpts.NegotiationFull {
+			o.TLSNegFull(reqData, srvData)
+		} else if o.opOpts.NegotiationSummary {
+			o.TLSNegSummary(reqData)
+		}
+		if o.opOpts.TLSFull {
+			o.TLSAgreedFull(reqData, srvData)
+		} else if o.opOpts.TLSSummary {
+			// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+			o.TLSAgreedSummary(reqData, srvData)
+		}
+	}
+
+	if o.opOpts.HeadFull {
+		o.HeadFull(reqData)
+	} else if o.opOpts.HeadSummary {
+		// unless the request is in the weird proxy form or whatever, URL will only contain a path; scheme, host etc will be empty
+		o.HeadSummary(reqData)
+	}
+
+	// Print only if the method would traditionally have a body
+	if (o.opOpts.BodyFull || o.opOpts.BodySummary) && (reqData.HttpMethod == http.MethodPost || reqData.HttpMethod == http.MethodPut || reqData.HttpMethod == http.MethodPatch) {
+		if o.opOpts.BodyFull {
+			o.BodyFull(reqData)
+		} else if o.opOpts.BodySummary {
+			o.BodySummary(reqData)
+		}
+	}
+
+	if o.opOpts.ResponseFull {
+		o.ResponseFull(respData)
+	} else if o.opOpts.ResponseSummary {
+		o.ResponseSummary(respData)
+	}
 }
 
 func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 	fmt.Printf(
 		"%s Listening on %s %s\n",
-		o.s.Info(fmtTimestamp(s.TransportListenTime)),
+		o.s.Timestamp(s.TransportListenTime, TimestampAbsolute, nil),
 		o.s.Noun(s.TransportListenAddress.Network()),
 		o.s.Addr(s.TransportListenAddress.String()),
 	)
@@ -116,7 +143,7 @@ func (o TtyRenderer) ListenInfo(s *state.DaemonData) {
 func (o TtyRenderer) TransportSummary(r *state.RequestData) {
 	fmt.Printf(
 		"%s Connection %s %s %s -> %s\n",
-		o.s.Info(fmtTimestamp(r.TransportConnTime)),
+		o.s.Timestamp(r.TransportConnTime, TimestampAbsolute, nil),
 		o.s.Bright(r.TransportConnNo),
 		o.s.Noun(r.TransportRemoteAddress.Network()),
 		o.s.Addr(r.TransportRemoteAddress.String()),
@@ -128,7 +155,7 @@ func (o TtyRenderer) TransportSummary(r *state.RequestData) {
 func (o TtyRenderer) TransportFull(r *state.RequestData) {
 	fmt.Printf(
 		"%s Connection %s\n",
-		o.s.Info(fmtTimestamp(r.TransportConnTime)),
+		o.s.Timestamp(r.TransportConnTime, TimestampAbsolute, nil),
 		o.s.Bright(r.TransportConnNo),
 	)
 	for i, hop := range r.HttpHops {
@@ -161,7 +188,7 @@ func (o TtyRenderer) TLSNegSummary(d *state.RequestData) {
 	// TODO: class indentPrinter, ctor takes a timestamp which is used for indent 0, ?and others?
 	fmt.Printf(
 		"%s TLS negotiation: ServerName %s\n",
-		o.s.Info(fmtTimestamp(d.TlsNegTime)),
+		o.s.Timestamp(d.TlsNegTime, TimestampAbsolute, nil),
 		o.s.Addr(d.TlsServerName),
 	)
 }
@@ -184,7 +211,7 @@ func (o TtyRenderer) TLSNegFull(r *state.RequestData, s *state.DaemonData) {
 
 func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
 	fmt.Printf("%s %s sni %s | alpn %s\n",
-		o.s.Info(fmtTimestamp(d.TlsAgreedTime)),
+		o.s.Timestamp(d.TlsAgreedTime, TimestampAbsolute, nil),
 		o.s.Noun(tls.VersionName(d.TlsAgreedVersion)),
 		o.s.Addr(d.TlsServerName),
 		o.s.Noun(d.TlsAgreedALPN),
@@ -219,7 +246,7 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	fmt.Printf(
 		"%s HTTP/%s vhost %s | %s %s by %s (%s headers, %s cookie values)\n",
-		o.s.Info(getTimestamp()),
+		o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil),
 		o.s.Noun(d.HttpProtocolVersion),
 		o.s.Addr(d.HttpHost),
 		o.s.Verb(d.HttpMethod),
@@ -232,7 +259,7 @@ func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 
 	if d.AuthJwt != nil {
 		fmt.Printf("%s %s [valid? %s]\n",
-			o.s.Info(getTimestamp()),
+			o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil),
 			o.s.JWTSummary(d.AuthJwt),
 			o.s.YesError(d.AuthJwtErr),
 		)
@@ -245,7 +272,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 	fmt.Printf(
 		"%s HTTP/%s vhost %s | %s %s\n",
-		o.s.Info(getTimestamp()),
+		o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil),
 		o.s.Noun(d.HttpProtocolVersion),
 		o.s.Addr(d.HttpHost),
 		o.s.Verb(d.HttpMethod),
@@ -255,7 +282,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	if len(d.HttpQuery) > 0 {
 		fmt.Println("Query")
 		queries, _ := url.ParseQuery(url.QueryEscape(d.HttpQuery))
-		//o.b.CheckWarn(err) TODO: we don't have a bios to hand, cause we shouldn't be parsing things this late in the game. Probably means storing duplicate (parsed/unparsed) data in reqData, but that's better than the alternative
+		//o.b.CheckWarn(err) TODO: this should be in the same place as extractOIDC etc, currently logmiddle
 		for k, vs := range queries {
 			fmt.Printf("\t%s = %v\n", o.s.Addr(k), o.s.Noun(strings.Join(vs, ",")))
 		}
@@ -303,7 +330,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	}
 
 	if d.AuthJwt != nil {
-		fmt.Printf("%s %s\n", o.s.Info(getTimestamp()), o.s.JWTSummary(d.AuthJwt))
+		fmt.Printf("%s %s\n", o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil), o.s.JWTSummary(d.AuthJwt))
 
 		// TODO: move these bits into an styler::JWTFull (which calls JWTSummary).
 		// - here, and the above JWTSummary call site should call JWTFull
@@ -319,46 +346,47 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 }
 
-func (o TtyRenderer) bodyCommon(r *state.RequestData, bodyLen int) {
+func (o TtyRenderer) bodyCommon(r *state.RequestData) bool {
+	fmt.Printf("Body read ok: %s\n", o.s.YesError(r.HttpBodyErr))
+
 	fmt.Printf(
 		"%s HTTP request body: alleged %s bytes of %s, actual length read %s\n",
-		o.s.Info(fmtTimestamp(r.HttpBodyTime)),
+		o.s.Timestamp(r.HttpBodyTime, TimestampAbsolute, nil),
 		o.s.Bright(r.HttpContentLength),
 		o.s.Noun(r.HttpContentType),
-		o.s.Bright(bodyLen),
+		o.s.Bright(r.HttpBodyLen),
 	)
+
+	return r.HttpBodyErr == nil
 }
 
 // BodySummary summarises the application-layer request body
 func (o TtyRenderer) BodySummary(r *state.RequestData) {
-	bodyLen := len(r.HttpBody)
+	if o.bodyCommon(r) {
+		printLen := min(r.HttpBodyLen, 72)
 
-	o.bodyCommon(r, bodyLen)
+		// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
+		fmt.Printf("%v", string(r.HttpBody[0:printLen])) // assumes utf8
+		if r.HttpBodyLen > printLen {
+			fmt.Printf("<%d bytes elided>", r.HttpBodyLen-printLen)
+		}
 
-	printLen := min(bodyLen, 72)
-
-	// TODO: ditto hex option in Full, but print array syntax? However many chars would make the rendered array printLen long
-	fmt.Printf("%v", string(r.HttpBody[0:printLen])) // assumes utf8
-	if bodyLen > printLen {
-		fmt.Printf("<%d bytes elided>", bodyLen-printLen)
-	}
-
-	if bodyLen > 0 {
-		fmt.Println()
+		if r.HttpBodyLen > 0 {
+			fmt.Println()
+		}
 	}
 }
 
 // BodyFull prints full contents of the application-layer request body
 func (o TtyRenderer) BodyFull(r *state.RequestData) {
-	bodyLen := len(r.HttpBody)
+	if o.bodyCommon(r) {
 
-	o.bodyCommon(r, bodyLen)
+		// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
+		fmt.Printf("%v", string(r.HttpBody)) // assumes utf8
 
-	// TODO: option for hex dump (must be a lib for that?). Do automatically when utf8 decode fails
-	fmt.Printf("%v", string(r.HttpBody)) // assumes utf8
-
-	if bodyLen > 0 {
-		fmt.Println()
+		if r.HttpBodyLen > 0 {
+			fmt.Println()
+		}
 	}
 }
 
@@ -366,13 +394,13 @@ func (o TtyRenderer) ResponseSummary(r *state.ResponseData) {
 	if r.PassthroughURL != nil {
 		fmt.Printf(
 			"%s Proxy to %s (response is forwarded)\n",
-			o.s.Info(fmtTimestamp(&r.ProxyRequestTime)),
+			o.s.Timestamp(r.ProxyRequestTime, TimestampAbsolute, nil),
 			o.s.Noun(r.PassthroughURL.String()),
 		)
 	}
 	fmt.Printf(
 		"%s Responding with %s\n",
-		o.s.Info(fmtTimestamp(&r.HttpHeaderTime)),
+		o.s.Timestamp(r.HttpHeaderTime, TimestampAbsolute, nil),
 		o.s.Noun(fmt.Sprintf("%d %s", r.HttpStatusCode, http.StatusText(r.HttpStatusCode))),
 	)
 	// - Don't give any more info about connection to upstream and its response; use print-cert if you wanna do that
@@ -381,7 +409,7 @@ func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
 	if r.PassthroughURL != nil {
 		fmt.Printf(
 			"%s Proxy to %s (response is forwarded)\n",
-			o.s.Info(fmtTimestamp(&r.ProxyRequestTime)),
+			o.s.Timestamp(r.ProxyRequestTime, TimestampAbsolute, nil),
 			o.s.Noun(r.PassthroughURL.String()),
 		)
 		fmt.Printf(
@@ -392,12 +420,12 @@ func (o TtyRenderer) ResponseFull(r *state.ResponseData) {
 	}
 	fmt.Printf(
 		"%s Responding with %s\n",
-		o.s.Info(fmtTimestamp(&r.HttpHeaderTime)),
+		o.s.Timestamp(r.HttpHeaderTime, TimestampAbsolute, nil),
 		o.s.Noun(fmt.Sprintf("%d %s", r.HttpStatusCode, http.StatusText(r.HttpStatusCode))),
 	)
 	fmt.Printf(
 		"%s HTTP response body: attempting %s bytes of %s, actual length written %s\n",
-		o.s.Info(fmtTimestamp(&r.HttpBodyTime)),
+		o.s.Timestamp(r.HttpBodyTime, TimestampAbsolute, nil),
 		o.s.Bright(r.HttpContentLength),
 		o.s.Noun(r.HttpContentType),
 		o.s.Bright(r.HttpBodyLen),

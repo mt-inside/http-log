@@ -8,8 +8,7 @@ import (
 )
 
 func NetListener(l net.Listener, d *state.DaemonData) {
-	now := time.Now()
-	d.TransportListenTime = &now
+	d.TransportListenTime = time.Now()
 
 	switch lis := l.(type) {
 	case *net.TCPListener:
@@ -20,8 +19,7 @@ func NetListener(l net.Listener, d *state.DaemonData) {
 }
 
 func NetConn(c net.Conn, requestNo uint64, d *state.RequestData) {
-	now := time.Now()
-	d.TransportConnTime = &now
+	d.TransportConnTime = time.Now()
 	d.TransportConnNo = requestNo
 	d.TransportRemoteAddress = c.RemoteAddr()
 	d.TransportLocalAddress = c.LocalAddr()

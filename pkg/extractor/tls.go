@@ -9,8 +9,7 @@ import (
 )
 
 func TlsClientHello(hi *tls.ClientHelloInfo, d *state.RequestData) {
-	now := time.Now()
-	d.TlsNegTime = &now
+	d.TlsNegTime = time.Now()
 	d.TlsServerName = hi.ServerName
 	d.TlsNegVersions = hi.SupportedVersions
 	d.TlsNegSignatureSchemes = hi.SignatureSchemes
@@ -20,8 +19,7 @@ func TlsClientHello(hi *tls.ClientHelloInfo, d *state.RequestData) {
 }
 
 func TlsConnectionState(cs *tls.ConnectionState, d *state.RequestData) {
-	now := time.Now()
-	d.TlsAgreedTime = &now
+	d.TlsAgreedTime = time.Now()
 	if cs.ServerName != d.TlsServerName {
 		panic(fmt.Errorf("established TLS connection's ServerName '%s' != ClientHello's '%s'", cs.ServerName, d.TlsServerName))
 	}
