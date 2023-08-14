@@ -175,18 +175,18 @@ func (o TtyRenderer) TLSNegFull(r *state.RequestData, s *state.DaemonData) {
 		fmt.Printf("\tpresenting serving cert: %s\n", o.s.ServingCertChain(codec.ChainFromCertificate(r.TlsNegServerCert)))
 	}
 
-	fmt.Printf("\tsupported versions: %s\n", o.s.List(TLSVersions2Strings(r.TlsNegVersions), NounStyle))
+	fmt.Printf("\tsupported versions: %s\n", o.s.List(utils.Map(r.TlsNegVersions, tls.VersionName), NounStyle))
 	// Underlying public/private key type and size (eg rsa:2048) is irrelevant I guess cause it's just a bytestream to this thing, which is just verifying the signature on it. But it will later have to be parsed and understood to key-exchange the symmetric key?
-	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(Slice2Strings(r.TlsNegSignatureSchemes), NounStyle))
-	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(Slice2Strings(r.TlsNegCurves), NounStyle))
-	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(CipherSuites2Strings(r.TlsNegCipherSuites), NounStyle))
+	fmt.Printf("\tsupported cert signature types: %s\n", o.s.List(utils.MapToString(r.TlsNegSignatureSchemes), NounStyle))
+	fmt.Printf("\tsupported cert curves: %s\n", o.s.List(utils.MapToString(r.TlsNegCurves), NounStyle))
+	fmt.Printf("\tsupported symmetric cypher suites: %s\n", o.s.List(utils.Map(r.TlsNegCipherSuites, tls.CipherSuiteName), NounStyle))
 	fmt.Printf("\tsupported ALPN protos: %s\n", o.s.List(r.TlsNegALPN, NounStyle))
 }
 
 func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
 	fmt.Printf("%s %s sni %s | alpn %s\n",
 		o.s.Info(fmtTimestamp(d.TlsAgreedTime)),
-		o.s.Noun(TLSVersionName(d.TlsAgreedVersion)),
+		o.s.Noun(tls.VersionName(d.TlsAgreedVersion)),
 		o.s.Addr(d.TlsServerName),
 		o.s.Noun(d.TlsAgreedALPN),
 	)

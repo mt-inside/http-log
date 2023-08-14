@@ -351,7 +351,7 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 		b.Linef("DNS: %s", s.List(cert.DNSNames, AddrStyle))
 	}
 	if len(cert.IPAddresses) > 0 {
-		b.Linef("IPs: %s", s.List(Slice2Strings(cert.IPAddresses), AddrStyle))
+		b.Linef("IPs: %s", s.List(utils.MapToString(cert.IPAddresses), AddrStyle))
 	}
 	if len(cert.URIs) > 0 {
 		b.Linef("URIs: %s", s.List(utils.Map(cert.URIs, s.Url), AddrStyle))
