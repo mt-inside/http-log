@@ -20,4 +20,4 @@ accounts:
   run-as: 65532
 
 entrypoint:
-  command: /usr/bin/http-log -m -b
+  command: /usr/bin/http-log -m -b -K=ecdsa
