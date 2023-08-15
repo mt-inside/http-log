@@ -340,26 +340,30 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 	var b IndentingBuilder
 
 	b.Printf("SANs:")
-	if len(cert.DNSNames) == 0 && len(cert.IPAddresses) == 0 && len(cert.URIs) == 0 && len(cert.EmailAddresses) == 0 {
+	anySans := false
+
+	if len(cert.DNSNames) > 0 {
+		b.Printf(" DNS %s", s.List(cert.DNSNames, AddrStyle))
+		anySans = true
+	}
+	if len(cert.IPAddresses) > 0 {
+		b.Printf(" IPs %s", s.List(utils.MapToString(cert.IPAddresses), AddrStyle))
+		anySans = true
+	}
+	if len(cert.URIs) > 0 {
+		b.Printf(" URIs %s", s.List(utils.Map(cert.URIs, s.Url), AddrStyle))
+		anySans = true
+	}
+	if len(cert.EmailAddresses) > 0 {
+		b.Printf(" Emails %s", s.List(cert.EmailAddresses, AddrStyle))
+		anySans = true
+	}
+
+	if !anySans {
 		b.Printf(s.Info(" <none>"))
-		return b.String()
 	}
 
 	b.NewLine()
-	b.Indent()
-	if len(cert.DNSNames) > 0 {
-		b.Linef("DNS: %s", s.List(cert.DNSNames, AddrStyle))
-	}
-	if len(cert.IPAddresses) > 0 {
-		b.Linef("IPs: %s", s.List(utils.MapToString(cert.IPAddresses), AddrStyle))
-	}
-	if len(cert.URIs) > 0 {
-		b.Linef("URIs: %s", s.List(utils.Map(cert.URIs, s.Url), AddrStyle))
-	}
-	if len(cert.EmailAddresses) > 0 {
-		b.Linef("Emails: %s", s.List(cert.EmailAddresses, AddrStyle))
-	}
-	b.Dedent()
 
 	return b.String()
 }
