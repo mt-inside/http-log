@@ -15,7 +15,6 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
-	"github.com/tetratelabs/log"
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/state"
 	"github.com/mt-inside/http-log/pkg/utils"
+	"github.com/mt-inside/http-log/pkg/zaplog"
 )
 
 /* TODO:
@@ -79,7 +79,7 @@ func main() {
 	//   * output: at this point things should be parsed, there should literaly be no errors to check for.
 	// * We only panic when: assumptions are broken (if we ever hit a panic, we add error check & handle logic)
 
-	log := log.NewFlattened()
+	log := zaplog.New()
 	scope.UseLogger(log)
 	scope.SetAllScopes(telemetry.LevelDebug)
 
