@@ -94,8 +94,9 @@ func main() {
 		Verbosity string `short:"v" long:"verbosity" description:"log verbosity. Does not affect final output" choice:"none" choice:"error" choice:"info" choice:"debug" default:"error"`
 
 		/* Network options */
-		ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
-		Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
+		ListenAddr    string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+		HandleTimeout time.Duration `long:"timeout" description:"Timeout for each of request reading and response writing" default:"60s"`
+		Timeout       time.Duration `long:"handle-timeout" description:"Timeout for network fetches used to encrich the output" default:"10s"`
 
 		/* Response options */
 		Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
@@ -250,10 +251,10 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              opts.ListenAddr,
-		ReadHeaderTimeout: 120 * time.Second, // Time for reading request headers
-		ReadTimeout:       120 * time.Second, // Time for reading request headers + body
-		WriteTimeout:      120 * time.Second, // Time for writing response (headers + body?)
-		IdleTimeout:       120 * time.Second, // Time between requests before the connection is dropped, when keep-alives are used.
+		ReadHeaderTimeout: opts.HandleTimeout, // Time for reading request headers (docs are unclear but seemingly subsumed into ReadTimeout)
+		ReadTimeout:       opts.HandleTimeout, // Time for reading request headers + body
+		WriteTimeout:      opts.HandleTimeout, // Time for writing response (headers + body)
+		IdleTimeout:       0,                  // Time between requests before the connection is dropped, when keep-alives are used.
 		Handler:           loggingMux,
 		// Called when the http server starts listening
 		BaseContext: func(l net.Listener) context.Context {
@@ -273,7 +274,7 @@ func main() {
 
 			var cancel context.CancelFunc
 			// Not sure if the ctx we get is cloned from BaseContext's one, but we clone it here anyway so no matter
-			ctx, cancel = context.WithTimeout(ctx, 10*time.Second) // TODO: configurable timeout. TODO: check for cancellation in places / use as ctx in http requests
+			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
 
 			reqData := state.NewRequestData()
 			respData := state.NewResponseData()
