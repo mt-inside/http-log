@@ -46,6 +46,8 @@ build-lambda: test
 	zip http-log-lambda.zip http-log-lambda
 
 package: test
+	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
+	rm -rf ./packages/
 	{{MELANGE}} bump melange.yaml {{TAGD}}
 	{{MELANGE}} keygen
 	{{MELANGE}} build --arch {{CGR_ARCHS}} --signing-key melange.rsa melange.yaml
