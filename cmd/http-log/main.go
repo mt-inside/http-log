@@ -220,7 +220,7 @@ func main() {
 
 		if opts.TLSAlgo != "off" {
 			srvData.TlsServingSelfSign = true
-			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(opts.TLSAlgo)
+			srvData.TlsServingCertPair, err = utils.GenSelfSignedCa(context.Background(), opts.TLSAlgo)
 			b.Unwrap(err)
 		}
 	}
@@ -322,8 +322,7 @@ func main() {
 					GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 						log.Info("TLS Asked for serving cert")
 						if srvData.TlsServingSelfSign {
-							log.Info("Generating self-signed serving cert")
-							cert, err := utils.GenServingCert(hi, srvData.TlsServingCertPair, opts.TLSAlgo)
+							cert, err := utils.GenServingCert(ctx, hi, srvData.TlsServingCertPair, opts.TLSAlgo)
 							if err == nil {
 								reqData.TlsNegServerCert = cert
 							}
