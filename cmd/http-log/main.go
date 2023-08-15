@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -42,6 +44,7 @@ func init() {
 }
 
 var requestNo uint64
+var log = scope.Register("main", "logs from the main package")
 
 // TODO: cobra + viper(? - go-flags is really nice)
 func main() {
@@ -79,14 +82,17 @@ func main() {
 	//   * output: at this point things should be parsed, there should literaly be no errors to check for.
 	// * We only panic when: assumptions are broken (if we ever hit a panic, we add error check & handle logic)
 
-	log := zaplog.New()
-	scope.UseLogger(log)
-	scope.SetAllScopes(telemetry.LevelDebug)
+	defaultLogger := zaplog.New()
+	scope.UseLogger(defaultLogger)
 
 	/* == Parse and grok arguments == */
 
 	var opts struct {
 		// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
+
+		/* Logging */
+		Verbosity string `short:"v" long:"verbosity" description:"log verbosity. Does not affect final output" choice:"none" choice:"error" choice:"info" choice:"debug" default:"error"`
+
 		/* Network options */
 		ListenAddr string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 		Timeout    time.Duration `long:"timeout" description:"Timeout for each individual network operation"`
@@ -112,6 +118,19 @@ func main() {
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		panic(err)
+	}
+
+	switch strings.ToLower(opts.Verbosity) {
+	case "debug":
+		scope.SetAllScopes(telemetry.LevelDebug)
+	case "info":
+		scope.SetAllScopes(telemetry.LevelInfo)
+	case "error":
+		scope.SetAllScopes(telemetry.LevelError)
+	case "none":
+		scope.SetAllScopes(telemetry.LevelNone)
+	default:
+		panic(fmt.Errorf("impossible log level %s", opts.Verbosity))
 	}
 
 	if opts.Output == "auto" {
