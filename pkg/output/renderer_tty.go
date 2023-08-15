@@ -324,7 +324,7 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	}
 
 	if d.AuthOIDC {
-		fmt.Printf("OIDC\n")
+		fmt.Printf("%s OIDC\n", o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil))
 		fmt.Printf("\tDiscovery: IdToken sig algos %s; Supported claims %s\n", o.s.List(d.AuthOIDCDiscoSupportedSigs, NounStyle), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)))
 		fmt.Printf("\tExtra Userinfo (%s/%s): %s\n", o.s.Number(len(d.AuthOIDCUserinfo)), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)), o.s.Map(d.AuthOIDCUserinfo, NounStyle))
 	}
