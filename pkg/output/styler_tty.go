@@ -298,8 +298,8 @@ func (s TtyStyler) Map(ins map[string]string, style aurora.Color) string {
 	// TODO: printlen constraint
 
 	for k, v := range ins {
-		b.WriteString(s.au.Colorize(k, NounStyle).String())
-		b.WriteString(": ")
+		b.WriteString(k)
+		b.WriteString(" ")
 		b.WriteString(s.au.Colorize(v, style).String())
 		b.WriteString("; ")
 	}
