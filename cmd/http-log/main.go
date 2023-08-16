@@ -118,6 +118,10 @@ func main() {
 
 	_, err := flags.Parse(&opts)
 	if err != nil {
+		var flagsErr *flags.Error
+		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
+			os.Exit(0)
+		}
 		panic(err)
 	}
 
