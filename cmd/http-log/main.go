@@ -295,6 +295,7 @@ func main() {
 
 			if _, found := hackStore[c.RemoteAddr()]; found {
 				panic("Assumption broken: remoteAddr reused")
+				// TODO: remove conns from the map when their state changes to closed
 			}
 			hackStore[c.RemoteAddr()] = ctx
 
@@ -305,6 +306,11 @@ func main() {
 			_, log := fromHackStore(c, log)
 
 			log.Info("Connection state change", "state", cs)
+
+			if cs == http.StateClosed {
+				delete(hackStore, c.RemoteAddr())
+				log.Debug("Connection closed; removing entry from hackStore", "remoteAddr", c.RemoteAddr())
+			}
 		},
 	}
 
