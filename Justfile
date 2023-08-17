@@ -5,8 +5,8 @@ default:
 
 DH_USER := "mtinside"
 REPO := "docker.io/" + DH_USER + "/http-log"
-TAG := `git describe --tags --abbrev`
-TAGD := `git describe --tags --abbrev --dirty`
+TAG := `git describe --tags --always --abbrev`
+TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
 MELANGE := "melange"
