@@ -29,11 +29,12 @@ const (
 	OkStyle   aurora.Color = aurora.GreenFg
 	WarnStyle aurora.Color = aurora.YellowFg
 
-	AddrStyle   aurora.Color = aurora.BlueFg
-	VerbStyle   aurora.Color = aurora.MagentaFg
-	NounStyle   aurora.Color = aurora.CyanFg
-	NumberStyle aurora.Color = aurora.CyanFg
-	BrightStyle aurora.Color = aurora.WhiteFg | aurora.BrightFg
+	AddrStyle     aurora.Color = aurora.BlueFg
+	VerbStyle     aurora.Color = aurora.MagentaFg
+	NounStyle     aurora.Color = aurora.CyanFg
+	NumberStyle   aurora.Color = aurora.CyanFg
+	DurationStyle aurora.Color = aurora.BlueFg
+	BrightStyle   aurora.Color = aurora.WhiteFg | aurora.BrightFg
 )
 
 func NewTtyStyler(au aurora.Aurora) TtyStyler {
@@ -89,6 +90,9 @@ func (s TtyStyler) Number(v any) string {
 		return s.Info("<none>")
 	}
 	return s.au.Colorize(v, NumberStyle).String()
+}
+func (s TtyStyler) Duration(v time.Duration) string {
+	return s.au.Colorize(v, DurationStyle).String()
 }
 func (s TtyStyler) Bright(v any) string {
 	if len(fmt.Sprint(v)) == 0 {
