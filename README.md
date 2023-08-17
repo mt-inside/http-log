@@ -6,17 +6,25 @@
 
 ## Stand-alone Daemon
 
-### Run locally
-Listen on `http://0.0.0.0:8090`, log requests, and respond with a json object.
-`go run ./cmd/http-log --addr :8090 --output json`
+These args will listen on `https://0.0.0.0:8080` with a self-signed cert, log requests, and respond with a json object. See `http-log -h`.
 
-See all args
-`go run ./cmd/http-log -h`
+Run from container image:
+```bash
+docker run -t --rm -p8080:8080 ghcr.io/mt-inside/http-log:v0.7.15
+```
 
-### Build and run docker image
-`docker build . -t http-log`
+Download single, statically-linked binary
+```bash
+wget -O http-log https://github.com/mt-inside/http-log/releases/download/v0.7.15/http-log-$(uname -s)-$(uname -m)
+chmod u+x http-log
+./http-log
+```
 
-`docker run http-log`
+Install from source
+```bash
+go install github.com/mt-inside/http-log/cmd/http-log@latest
+${GOPATH}/bin/http-log
+```
 
 ## AWS Lambda
 
