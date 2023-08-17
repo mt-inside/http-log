@@ -40,7 +40,7 @@ render-mod-graph:
 render-pkg-graph:
 	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
 
-build-local: test
+build-dev: test
 	# Use CGO here, like in the container, so this binary is pretty representative.
 	# Don't statically link though, as that's a nightmare on all possible dev machines.
 	go build {{LD_COMMON}} ./cmd/http-log
@@ -49,7 +49,7 @@ build-local: test
 build-ci *ARGS:
 	# We use CGO, so that we get libc's sophisticated name resolution etc. This is basically pointless because we're in a container which won't have NIS/LDAP/etc set up, but maybe someone wants to mount that config in?
 	# Since we use CGO, force gcc's ld, and tell it to statically link libc in, for ease of packaging in a container
-	go build {{LD_COMMON}} {{ARGS}} ./cmd/http-log
+	go build {{LD_STATIC}} {{ARGS}} ./cmd/http-log
 
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
