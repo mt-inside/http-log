@@ -7,7 +7,6 @@ DH_USER := "mtinside"
 REPO := "docker.io/" + DH_USER + "/http-log"
 TAG := `git describe --tags --abbrev`
 TAGD := `git describe --tags --abbrev --dirty`
-ARCHS := "linux/amd64,linux/arm64,linux/arm/v7"
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
 MELANGE := "melange"
@@ -19,8 +18,12 @@ tools-install:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/exp/cmd/...@latest
 	go install github.com/kisielk/godepgraph@latest
+	go install golang.org/x/tools/cmd/stringer@latest
 
-lint:
+generate:
+	go generate ./...
+
+lint: generate
 	gofmt -s -w .
 	goimports -local github.com/mt-inside/http-log -w .
 	go vet ./...
@@ -78,11 +81,13 @@ cosign-verify:
 	COSIGN_EXPERIMENTAL=1 cosign verify {{REPO}}:{{TAG}} | jq .
 
 clean:
-	rm -rf coverage.out
-	rm -rf mod_graph.png pkg_graph.png
+	rm -f coverage.out
+	rm -f mod_graph.png pkg_graph.png
+	rm -f sbom-*
 	rm -rf packages/
-	rm -rf sbom-*
 	rm -rf http-log.tar
+	rm -f htto-log
+	rm -f melange.rsa*
 
 run-daemon-image:
 	docker run -ti -p8080:8080 {{REPO}}:{{TAG}}
