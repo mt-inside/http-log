@@ -9,6 +9,7 @@ TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
+LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
 
@@ -39,10 +40,16 @@ render-mod-graph:
 render-pkg-graph:
 	godepgraph -s -onlyprefixes github.com/mt-inside ./cmd/http-log | dot -Tpng -o pkg_graph.png
 
-build: test
+build-local: test
 	# Use CGO here, like in the container, so this binary is pretty representative.
 	# Don't statically link though, as that's a nightmare on all possible dev machines.
-	go build -a {{LD_COMMON}} ./cmd/http-log
+	go build {{LD_COMMON}} ./cmd/http-log
+
+# Don't lint/test, because it doesn't work in various CI envs
+build-ci *ARGS:
+	# We use CGO, so that we get libc's sophisticated name resolution etc. This is basically pointless because we're in a container which won't have NIS/LDAP/etc set up, but maybe someone wants to mount that config in?
+	# Since we use CGO, force gcc's ld, and tell it to statically link libc in, for ease of packaging in a container
+	go build {{LD_COMMON}} {{ARGS}} ./cmd/http-log
 
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda

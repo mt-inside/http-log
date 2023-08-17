@@ -13,8 +13,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install Just
+        uses: extractions/setup-just@v1
+
       - name: build-linux-amd64
-        run: GOOS="linux" GOARCH="amd64" CGO_ENABLED=0 go build -ldflags="-w -X 'github.com/mt-inside/go-jwks/internal/build.Version="${{ github.ref_name }}"'" ./cmd/http-log
+        run: GOOS="linux" GOARCH="amd64" just build-ci
       - name: move-linux-amd64
         run: mv http-log http-log-Linux-x86_64
 
