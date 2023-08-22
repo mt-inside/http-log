@@ -25,6 +25,8 @@ github.com/mt-inside/go-jwks v0.2.0 h1:ADMMLXEpcva/xt7REu8RvoqMldBAZBR0uFchFQfGO
 github.com/mt-inside/go-jwks v0.2.0/go.mod h1:aZzoqwn/TL39COkSIIySz+3MErO58EtEbbu2kxIhNP4=
 github.com/mt-inside/go-usvc v0.0.7 h1:fRkg084Yg2laZ3c8ny1FgTrGZS38VLWEdKIIiXykzHo=
 github.com/mt-inside/go-usvc v0.0.7/go.mod h1:TuNBFFihKEkU9VYgI0zBvd0uZ+xYvQynSUp/qlSl+NU=
+github.com/pires/go-proxyproto v0.7.0 h1:IukmRewDQFWC7kfnb66CSomk2q/seBuilHBYFwyq0Hs=
+github.com/pires/go-proxyproto v0.7.0/go.mod h1:Vz/1JPY/OACxWGQNIRY2BeyDmpoaWmEP40O9LbuiFR4=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -37,8 +39,6 @@ github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.8.0 h1:pSgiaMZlXftHpm5L7V1+rVB+AZJydKsMxsQBIJw4PKk=
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
-github.com/tetratelabs/log v0.2.3 h1:a+0omnV1Y/4PyOSbLXHsba1guq8MZmmSvq+n9YdNuLY=
-github.com/tetratelabs/log v0.2.3/go.mod h1:KCZYD/fW3ZlhTWgmGBvsiniEk6TUZEL/Eb6W928+ymM=
 github.com/tetratelabs/telemetry v0.7.5 h1:38O3zbgevOUfkJiJe/UN1IpTWh5e0tIlktQs261lLr4=
 github.com/tetratelabs/telemetry v0.7.5/go.mod h1:jDUcf1A2u4F5V1io5RdipM/bKz/hFCsx/RAgGopC37s=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=

@@ -17,6 +17,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
+	"github.com/pires/go-proxyproto"
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 
@@ -314,6 +315,14 @@ func main() {
 		},
 	}
 
+	lis, err := net.Listen("tcp", srv.Addr)
+	b.Unwrap(err)
+	proxyLis := &proxyproto.Listener{
+		Listener:          lis,
+		ReadHeaderTimeout: opts.HandleTimeout,
+	}
+	defer proxyLis.Close()
+
 	if srvData.TlsOn {
 		srv.TLSConfig = &tls.Config{
 			/* Hooks in order they're called */
@@ -362,10 +371,10 @@ func main() {
 				panic("I should never be called; TLS config should be overwritten by this point")
 			},
 		}
-		b.Unwrap(srv.ListenAndServeTLS("", ""))
+		b.Unwrap(srv.ServeTLS(proxyLis, "", ""))
 		log.Info("Server shutting down")
 	} else {
-		b.Unwrap(srv.ListenAndServe())
+		b.Unwrap(srv.Serve(proxyLis))
 		log.Info("Server shutting down")
 	}
 }
