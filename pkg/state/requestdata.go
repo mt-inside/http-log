@@ -57,7 +57,7 @@ type RequestData struct {
 	AuthOIDC                     bool
 	AuthOIDCDiscoSupportedClaims []string
 	AuthOIDCDiscoSupportedSigs   []string
-	AuthOIDCUserinfo             map[string]string
+	AuthOIDCUserinfo             map[string]any
 	AuthOIDCJwks                 map[string]any
 
 	HttpBodyTime      time.Time // When the body finished being read

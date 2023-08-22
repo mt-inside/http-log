@@ -188,7 +188,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 
 	if oidcUserinfoResp.StatusCode >= 200 && oidcUserinfoResp.StatusCode < 400 {
 		// TODO: deal with other possible userinfo type: JWT (indicated in mime), nested JWT (detected how?)
-		oidcUserinfo := map[string]string{} // TODO type this?
+		oidcUserinfo := map[string]any{}
 		err = json.NewDecoder(oidcUserinfoResp.Body).Decode(&oidcUserinfo)
 		if err != nil {
 			log.Error("can't decode OIDC Userinfo", err)

@@ -292,7 +292,7 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 	return b.String()
 }
 
-func (s TtyStyler) Map(ins map[string]string, style aurora.Color) string {
+func (s TtyStyler) Map(ins map[string]any, style aurora.Color) string {
 	if len(ins) == 0 {
 		return s.au.Colorize("<none>", InfoStyle).String()
 	}
@@ -305,7 +305,7 @@ func (s TtyStyler) Map(ins map[string]string, style aurora.Color) string {
 		b.WriteString(k)
 		b.WriteString(" ")
 		b.WriteString(s.au.Colorize(v, style).String())
-		b.WriteString("; ")
+		b.WriteString(" ")
 	}
 
 	return b.String()
