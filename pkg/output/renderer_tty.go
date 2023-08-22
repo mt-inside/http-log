@@ -158,6 +158,11 @@ func (o TtyRenderer) TransportFull(r *state.RequestData) {
 		o.s.Timestamp(r.TransportConnTime, TimestampAbsolute, nil),
 		o.s.Bright(r.TransportConnNo),
 	)
+
+	if r.TransportProxyProtocol {
+		fmt.Printf("\tConnection used Proxy Protocol v%s\n", o.s.Noun(r.TransportProxyProtocolVersion))
+	}
+
 	for i, hop := range r.HttpHops {
 		proto := "http"
 		if hop.TLS {

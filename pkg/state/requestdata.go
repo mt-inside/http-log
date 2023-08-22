@@ -13,10 +13,12 @@ import (
 // This layer exists so that different op "stages" can use info from other ones, eg printing HSTS header info with TLS stuff
 // TODO: However the reason it splits everything out like this is to provide compatibility with other server frameworks like lambda, CF workers, etc. This might prove to be a step too far to be useful, and maybe they all wanna have different outputters (in cmd/internal?) just sharing the stylers/biosen
 type RequestData struct {
-	TransportConnTime      time.Time
-	TransportConnNo        uint64 // TODO. Where should this state be held?
-	TransportRemoteAddress net.Addr
-	TransportLocalAddress  net.Addr // Note that this is not the same as the Server's TcpListenAddress, as that might be eg 0.0.0.0
+	TransportConnTime             time.Time
+	TransportConnNo               uint64 // TODO. Where should this state be held?
+	TransportRemoteAddress        net.Addr
+	TransportLocalAddress         net.Addr // Note that this is not the same as the Server's TcpListenAddress, as that might be eg 0.0.0.0
+	TransportProxyProtocol        bool
+	TransportProxyProtocolVersion byte
 
 	TlsNegTime             time.Time
 	TlsNegServerCert       *tls.Certificate
