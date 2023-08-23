@@ -11,17 +11,16 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/logrusorgru/aurora/v3 v3.0.0
 	github.com/mattn/go-isatty v0.0.19
-	github.com/mt-inside/go-jwks v0.2.0
+	github.com/mt-inside/go-jwks v0.2.1
 	github.com/mt-inside/go-usvc v0.0.7
-	github.com/tetratelabs/telemetry v0.7.5
-	go.uber.org/zap v1.24.0
+	github.com/pires/go-proxyproto v0.7.0
+	github.com/tetratelabs/telemetry v0.8.0
+	go.uber.org/zap v1.25.0
 )
 
 require (
-	github.com/pires/go-proxyproto v0.7.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/sys v0.9.0 // indirect
+	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
+	golang.org/x/sys v0.11.0 // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
 )
