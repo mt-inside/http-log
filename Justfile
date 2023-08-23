@@ -67,7 +67,7 @@ image-local:
 	docker load < http-log.tar
 image-publish:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
-	{{APKO}} login ghcr.io -u {{GH_USER}} --password "${GH_TOKEN}"
+	{{APKO}} login ghcr.io   -u {{GH_USER}} --password "${GH_TOKEN}"
 	{{APKO}} publish --keyring-append melange.rsa.pub --arch {{CGR_ARCHS}} apko.yaml {{GH_REPO}}:{{TAG}} {{DH_REPO}}:{{TAG}}
 image-publish-no-certs:
 	{{APKO}} login docker.io -u {{DH_USER}} --password "${DH_TOKEN}"
