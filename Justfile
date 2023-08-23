@@ -49,7 +49,8 @@ build-dev: test
 build-ci *ARGS:
 	# Ideally we'd use CGO, because the libc/nsswitch-based name resolution is probably very useful for some people.
 	# However, it's very difficult to cross-compile, and would ideally be statically-linked, for which instructions vary on mac etc.
-	CGO_ENABLED=0 go build {{LD_COMMON}} {{ARGS}} ./cmd/http-log
+	# TODO: fix this properly; don't use Go's cross-compilation, rather build native under emulation (though ig that's difficult cause where's the target libc gonna come from?)
+	CGO_ENABLED=0 go build {{LD_COMMON}} -v {{ARGS}} ./cmd/http-log
 
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
