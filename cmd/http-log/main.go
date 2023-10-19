@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -21,6 +22,7 @@ import (
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 
+	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/bios"
 	"github.com/mt-inside/http-log/pkg/codec"
@@ -189,6 +191,21 @@ func main() {
 	}
 
 	b.Version()
+
+	// TODO: add /quitquitquit
+	go func() {
+		startTime := time.Now().UTC()
+		r := http.NewServeMux()
+		r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			j, _ := json.Marshal(map[string]string{"health": "ok", "name": build.Name, "version": build.Version, "started": fmt.Sprintf("%v", startTime), "uptime": fmt.Sprintf("%v", time.Since(startTime))})
+			_, _ = w.Write(j)
+		})
+		srv := &http.Server{
+			Addr:    ":8081",
+			Handler: r,
+		}
+		_ = srv.ListenAndServe()
+	}()
 
 	srvData := state.NewDaemonData()
 
