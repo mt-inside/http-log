@@ -193,6 +193,7 @@ func main() {
 	b.Version()
 
 	// TODO: add /quitquitquit
+	// TODO: take port for this as an arg (with default), error if this port == service port
 	go func() {
 		startTime := time.Now().UTC()
 		r := http.NewServeMux()
