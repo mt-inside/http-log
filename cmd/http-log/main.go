@@ -100,6 +100,7 @@ func main() {
 		ListenAddr    string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
 		HandleTimeout time.Duration `long:"timeout" description:"Timeout for each of request reading and response writing" default:"60s"`
 		Timeout       time.Duration `long:"handle-timeout" description:"Timeout for network fetches used to encrich the output" default:"10s"`
+		Http11        bool          `long:"http-11" description:"Force http/1.1 (disallow TLS ALPN negotiation of http2)"`
 
 		/* Response options */
 		Status          int    `short:"s" long:"status" description:"HTTP status code to return" default:"200"`
@@ -355,7 +356,8 @@ func main() {
 
 				// Close over this req/respData
 				cfg := &tls.Config{
-					ClientAuth: tls.RequestClientCert, // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
+					NextProtos: utils.Ternary(opts.Http11, nil, []string{"h2", "http/1.1"}), // Because we're providing our own tls.Config, this is by default empty, so h1.1 will be negotiated. So we manually send this.
+					ClientAuth: tls.RequestClientCert,                                       // request but don't require. TODO when we verify them, this should be VerifyClientCertIfGiven
 					GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
 						log.Info("TLS Asked for serving cert")
 						if srvData.TlsServingSelfSign {

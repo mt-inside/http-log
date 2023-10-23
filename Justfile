@@ -104,6 +104,8 @@ run-daemon-image:
 
 run-daemon *ARGS: test
 	go run {{LD_COMMON}} ./cmd/http-log -K=ecdsa {{ARGS}}
+run-daemon-no-tls *ARGS: test
+	go run {{LD_COMMON}} ./cmd/http-log {{ARGS}}
 
 run-daemon-mtls-jwt *ARGS: test
 	# FIXME hardcoded path; copy JWT creation stuff from istio-demo-master into mkpki
