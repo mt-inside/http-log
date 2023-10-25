@@ -44,6 +44,7 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	extractor.HttpRequest(r, srvData, reqData)
 
+	// TODO: h2c upgraded requests (eg from curl --http2, to us running plaintext without --http-11) stall here. If you ctrl-c curl (ie close the pipe) then we will show the right stuff. So reading the body is blocking after the h2c uprade. Read the h2c docs re closed bodies and what you're meant to do.
 	reqData.HttpBody, reqData.HttpBodyErr = io.ReadAll(r.Body)
 	reqData.HttpBodyTime = time.Now()
 

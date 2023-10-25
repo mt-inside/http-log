@@ -21,6 +21,8 @@ import (
 	"github.com/pires/go-proxyproto"
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/internal/ctxt"
@@ -273,14 +275,28 @@ func main() {
 		actionMux,
 	)
 
+	lis, err := net.Listen("tcp", opts.ListenAddr)
+	b.Unwrap(err)
+
+	proxyLis := &proxyproto.Listener{
+		Listener:          lis,
+		ReadHeaderTimeout: opts.HandleTimeout,
+	}
+	defer proxyLis.Close()
+
+	srv2 := &http2.Server{
+		IdleTimeout: 0,
+	}
+
 	srv := &http.Server{
-		Addr:              opts.ListenAddr,
-		ReadHeaderTimeout: opts.HandleTimeout, // Time for reading request headers (docs are unclear but seemingly subsumed into ReadTimeout)
-		ReadTimeout:       opts.HandleTimeout, // Time for reading request headers + body
-		WriteTimeout:      opts.HandleTimeout, // Time for writing response (headers + body)
-		IdleTimeout:       0,                  // Time between requests before the connection is dropped, when keep-alives are used.
-		Handler:           loggingMux,
-		// Called when the http server starts listening
+		Addr:              opts.ListenAddr,                                                          // TODO: doesn't need to be here because we make our own net.lis?
+		ReadHeaderTimeout: opts.HandleTimeout,                                                       // Time for reading request headers (docs are unclear but seemingly subsumed into ReadTimeout)
+		ReadTimeout:       opts.HandleTimeout,                                                       // Time for reading request headers + body
+		WriteTimeout:      opts.HandleTimeout,                                                       // Time for writing response (headers + body)
+		IdleTimeout:       0,                                                                        // Time between requests before the connection is dropped, when keep-alives are used.
+		Handler:           utils.Ternary(opts.Http11, loggingMux, h2c.NewHandler(loggingMux, srv2)), // This lib is tres useful. It handles upgrades from h1 using `Upgrade: h2c`, and also makes immediate-h2 work, I guess by spotting the PRI method and hijacking. It even arranges for BaseContext and ConnContext to be called, which I couldn't figure out driving http2 manually
+		// Called when the http server starts listening.
+		// Not called by http2.ServeCon
 		BaseContext: func(l net.Listener) context.Context {
 			extractor.NetListener(l, srvData)
 
@@ -293,6 +309,7 @@ func main() {
 			return ctx
 		},
 		// Called when the http server accepts an incoming connection
+		// Not called by h2.
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			// TODO: ctx has a bunch of info under context-key "http-server"
 
@@ -313,15 +330,12 @@ func main() {
 			ctx = ctxt.RespDataToContext(ctx, respData)
 			ctx = ctxt.CtxCancelToContext(ctx, cancel)
 
-			if _, found := hackStore[c.RemoteAddr()]; found {
-				panic("Assumption broken: remoteAddr reused")
-				// TODO: remove conns from the map when their state changes to closed
-			}
-			hackStore[c.RemoteAddr()] = ctx
+			toHackStore(c, ctx)
 
 			return ctx
 		},
 		// Called when an http server connection changes state
+		// Called by h2.
 		ConnState: func(c net.Conn, cs http.ConnState) {
 			_, log := fromHackStore(c, log)
 
@@ -333,14 +347,6 @@ func main() {
 			}
 		},
 	}
-
-	lis, err := net.Listen("tcp", srv.Addr)
-	b.Unwrap(err)
-	proxyLis := &proxyproto.Listener{
-		Listener:          lis,
-		ReadHeaderTimeout: opts.HandleTimeout,
-	}
-	defer proxyLis.Close()
 
 	if srvData.TlsOn {
 		srv.TLSConfig = &tls.Config{
@@ -395,12 +401,52 @@ func main() {
 		log.Info("Server shutting down")
 	} else {
 		b.Unwrap(srv.Serve(proxyLis))
+		// The h2c library is magic and handles h2/plaintext, even those without prior Upgrade requests.
+		// However if you did wanna do h2 manually, this is how (since I went to the effort of working it out):
+		// for {
+		// 	conn, err := proxyLis.Accept()
+		// 	b.Unwrap(err)
+
+		// 	// Have to do BaseContext and ConnContext in here. Neither are called by h2.
+		// 	ctx := context.Background()
+		// 	ctx = ctxt.SrvDataToContext(ctx, srvData)
+		// 	var cancel context.CancelFunc
+		// 	ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		// 	reqData := state.NewRequestData()
+		// 	respData := state.NewResponseData()
+
+		// 	requestNo++
+		// 	ctx = telemetry.KeyValuesToContext(ctx, "request", requestNo)
+		// 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+		// 	log.Info("Accepting tcp connection")
+		// 	extractor.NetConn(conn, requestNo, reqData)
+
+		// 	ctx = ctxt.ReqDataToContext(ctx, reqData)
+		// 	ctx = ctxt.RespDataToContext(ctx, respData)
+		// 	ctx = ctxt.CtxCancelToContext(ctx, cancel)
+		// 	toHackStore(conn, ctx)
+		// 	go srv2.ServeConn(
+		// 		conn,
+		// 		&http2.ServeConnOpts{
+		// 			BaseConfig: srv,
+		// 			Context:    ctx,
+		// 		},
+		// 	)
+		// }
 		log.Info("Server shutting down")
 	}
 }
 
 var hackStore = map[net.Addr]context.Context{}
 
+func toHackStore(c net.Conn, ctx context.Context) {
+	// TODO lock me
+	if _, found := hackStore[c.RemoteAddr()]; found {
+		panic("Assumption broken: remoteAddr reused")
+		// TODO: remove conns from the map when their state changes to closed
+	}
+	hackStore[c.RemoteAddr()] = ctx
+}
 func fromHackStore(c net.Conn, log telemetry.Logger) (context.Context, telemetry.Logger) {
 	// TODO lock me
 	ctx, found := hackStore[c.RemoteAddr()]

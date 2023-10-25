@@ -16,11 +16,13 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/tetratelabs/telemetry v0.8.0
 	go.uber.org/zap v1.25.0
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
 )
 
 require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/text v0.3.3 // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
 )
