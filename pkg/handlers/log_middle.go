@@ -10,21 +10,17 @@ import (
 	"github.com/mt-inside/http-log/internal/ctxt"
 	"github.com/mt-inside/http-log/pkg/enricher"
 	"github.com/mt-inside/http-log/pkg/extractor"
-	"github.com/mt-inside/http-log/pkg/output"
 	"github.com/mt-inside/http-log/pkg/parser"
 )
 
 type LogMiddle struct {
-	op   output.Renderer
 	next http.Handler
 }
 
 func NewLogMiddle(
-	op output.Renderer,
 	next http.Handler,
 ) http.Handler {
 	return &LogMiddle{
-		op,
 		next,
 	}
 }
@@ -38,7 +34,6 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	srvData := ctxt.SrvDataFromContext(ctx)
 	reqData := ctxt.ReqDataFromContext(ctx)
-	respData := ctxt.RespDataFromContext(ctx)
 
 	/* Record request info */
 
@@ -63,7 +58,7 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	/* Print */
 
-	lm.op.Output(srvData, reqData, respData)
+	// Printing is done when ConnState(closed)
 
 	/* Done */
 

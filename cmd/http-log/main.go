@@ -271,7 +271,6 @@ func main() {
 	}
 
 	loggingMux := handlers.NewLogMiddle(
-		op,
 		actionMux,
 	)
 
@@ -337,11 +336,16 @@ func main() {
 		// Called when an http server connection changes state
 		// Called by h2.
 		ConnState: func(c net.Conn, cs http.ConnState) {
-			_, log := fromHackStore(c, log)
+			ctx, log := fromHackStore(c, log)
 
 			log.Info("Connection state change", "state", cs)
 
 			if cs == http.StateClosed {
+				srvData := ctxt.SrvDataFromContext(ctx)
+				reqData := ctxt.ReqDataFromContext(ctx)
+				respData := ctxt.RespDataFromContext(ctx)
+				op.Output(srvData, reqData, respData)
+
 				delete(hackStore, c.RemoteAddr())
 				log.Debug("Connection closed; removing entry from hackStore", "remoteAddr", c.RemoteAddr())
 			}
