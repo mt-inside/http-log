@@ -12,7 +12,6 @@ type tCtxKey string
 var srvDataKey = tCtxKey("srvData")
 var reqDataKey = tCtxKey("reqData")
 var respDataKey = tCtxKey("respData")
-var ctxCancelKey = tCtxKey("ctxCancel")
 
 func fromContext(ctx context.Context, key tCtxKey) any {
 	val := ctx.Value(key)
@@ -31,9 +30,6 @@ func ReqDataToContext(ctx context.Context, d *state.RequestData) context.Context
 func RespDataToContext(ctx context.Context, d *state.ResponseData) context.Context {
 	return context.WithValue(ctx, respDataKey, d)
 }
-func CtxCancelToContext(ctx context.Context, cancel context.CancelFunc) context.Context {
-	return context.WithValue(ctx, ctxCancelKey, cancel)
-}
 
 func SrvDataFromContext(ctx context.Context) *state.DaemonData {
 	return fromContext(ctx, srvDataKey).(*state.DaemonData)
@@ -43,7 +39,4 @@ func ReqDataFromContext(ctx context.Context) *state.RequestData {
 }
 func RespDataFromContext(ctx context.Context) *state.ResponseData {
 	return fromContext(ctx, respDataKey).(*state.ResponseData)
-}
-func CtxCancelFromContext(ctx context.Context) context.CancelFunc {
-	return fromContext(ctx, ctxCancelKey).(context.CancelFunc)
 }

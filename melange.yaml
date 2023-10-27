@@ -1,7 +1,7 @@
 package:
   name: http-log
   epoch: 0
-  version: v0.7.17-9-ga361687-dirty
+  version: v0.7.17-10-gdb0fbc9
   description: Logs HTTP requests
   url: https://github.com/mt-inside/http-log
   copyright:

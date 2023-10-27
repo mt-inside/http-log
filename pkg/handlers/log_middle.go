@@ -61,6 +61,4 @@ func (lm LogMiddle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Printing is done when ConnState(closed)
 
 	/* Done */
-
-	ctxt.CtxCancelFromContext(ctx)()
 }

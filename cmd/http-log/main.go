@@ -312,10 +312,6 @@ func main() {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			// TODO: ctx has a bunch of info under context-key "http-server"
 
-			var cancel context.CancelFunc
-			// Not sure if the ctx we get is cloned from BaseContext's one, but we clone it here anyway so no matter
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-
 			reqData := state.NewRequestData()
 			respData := state.NewResponseData()
 
@@ -327,7 +323,6 @@ func main() {
 
 			ctx = ctxt.ReqDataToContext(ctx, reqData)
 			ctx = ctxt.RespDataToContext(ctx, respData)
-			ctx = ctxt.CtxCancelToContext(ctx, cancel)
 
 			toHackStore(c, ctx)
 
