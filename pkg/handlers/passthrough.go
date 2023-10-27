@@ -117,6 +117,7 @@ func (ph passthroughHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// TODO: is it an issue that LoggMiddle's read the body already? Test with a request body from the original client
+	r.Host = r.URL.Host
 	respData.PassthroughURL = r.URL
 
 	/* Clear non-forward headers */
