@@ -335,6 +335,11 @@ func main() {
 
 			log.Info("Connection state change", "state", cs)
 
+			// FIXME: h2, Envoy(h1), etc hold connections open, so we prolly need to hook IDLE to print
+			// - indeed, print-cert-repeating over h2 just has the conn go active,idle,active,etc. All seem like the same reqNo. Never get printed
+			// need to detect conn re-use somehow, and bump reqNo (and make new structs etc) on transition to active (but re-use the tcp info from the conn going to new omg)
+			// - but it goes idle >1 time. When? Seen: h2c's h2 upgrade (PRI or h1:Upgrade); TLS handshake
+			// when this is fixed, can put istio-demo back to h2 (appProto http2, h2UpgradePolicy)
 			if cs == http.StateClosed {
 				srvData := ctxt.SrvDataFromContext(ctx)
 				reqData := ctxt.ReqDataFromContext(ctx)
