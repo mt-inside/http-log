@@ -215,7 +215,7 @@ func (o TtyRenderer) TLSNegFull(r *state.RequestData, s *state.DaemonData) {
 }
 
 func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
-	fmt.Printf("%s %s sni %s | alpn %s\n",
+	fmt.Printf("%s %s sni %s => alpn %s",
 		o.s.Timestamp(d.TlsAgreedTime, TimestampAbsolute, nil),
 		o.s.Noun(tls.VersionName(d.TlsAgreedVersion)),
 		o.s.Addr(d.TlsServerName),
@@ -226,6 +226,7 @@ func (o TtyRenderer) tlsAgreedCommon(d *state.RequestData) {
 // TLSSummary summarises the connection transport
 func (o TtyRenderer) TLSAgreedSummary(r *state.RequestData, s *state.DaemonData) {
 	o.tlsAgreedCommon(r)
+	fmt.Println()
 
 	if len(r.TlsClientCerts) > 0 {
 		//TODO: CertSummaryVerified() (pass in ca, verify, just print valid? YesError() on the the end of the line)
@@ -233,13 +234,15 @@ func (o TtyRenderer) TLSAgreedSummary(r *state.RequestData, s *state.DaemonData)
 			o.s.CertSummary(r.TlsClientCerts[0]),
 		)
 	}
+	// TODO: print that we didn't get any client certs (always print), and whether we asked for them or not (print the message as an info or warn)
 }
 
 // TLSFull prints full details on the connection transport
 func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 	o.tlsAgreedCommon(r)
 
-	fmt.Printf("\tcypher suite %s\n", o.s.Noun(tls.CipherSuiteName(r.TlsAgreedCipherSuite)))
+	fmt.Printf("; cypher suite %s", o.s.Noun(tls.CipherSuiteName(r.TlsAgreedCipherSuite)))
+	fmt.Println()
 
 	if len(r.TlsClientCerts) > 0 {
 		fmt.Printf("\tclient cert received\n")
@@ -250,11 +253,11 @@ func (o TtyRenderer) TLSAgreedFull(r *state.RequestData, s *state.DaemonData) {
 // HeadSummary summarises the application-layer request header
 func (o TtyRenderer) HeadSummary(d *state.RequestData) {
 	fmt.Printf(
-		"%s HTTP/%s vhost %s | %s %s by %s (%s headers, %s cookie values)\n",
+		"%s HTTP/%s %s %s %s by %s (%s headers, %s cookie values)\n",
 		o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil),
 		o.s.Noun(d.HttpProtocolVersion),
-		o.s.Addr(d.HttpHost),
 		o.s.Verb(d.HttpMethod),
+		o.s.Addr(d.HttpHost),
 		// url.Host should be empty for a normal request. TODO assert that it is, investigate the types of req we get if someone thinks we're a proxy and print that info
 		o.s.PathElements(d.HttpPath, d.HttpQuery, d.HttpFragment),
 		o.s.Noun(d.HttpUserAgent),
@@ -276,11 +279,11 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	// TODO: share this fn with header printing in print-cert::responseData.Print
 
 	fmt.Printf(
-		"%s HTTP/%s vhost %s | %s %s\n",
+		"%s HTTP/%s %s %s %s\n",
 		o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil),
 		o.s.Noun(d.HttpProtocolVersion),
-		o.s.Addr(d.HttpHost),
 		o.s.Verb(d.HttpMethod),
+		o.s.Addr(d.HttpHost),
 		o.s.Addr(d.HttpPath),
 	)
 
