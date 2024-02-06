@@ -508,53 +508,87 @@ func (s TtyStyler) VerifiedClientCertChain(chain []*x509.Certificate, caCert *x5
 	return s.VerifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, verbose)
 }
 
-func (s TtyStyler) JWTSummary(token *jwt.Token) string {
-	var b strings.Builder
+func (s TtyStyler) jwtCommon(token *jwt.Token) *IndentingBuilder {
+	var b IndentingBuilder
 
-	b.WriteString(s.Noun("JWT"))
-	claims := token.Claims.(*jwt.RegisteredClaims)
+	b.Print(s.Noun("JWT"))
+	claims := token.Claims.(*jwt.MapClaims)
 
 	/* Times */
 
-	b.WriteString(" [")
+	b.Print(" [")
 
-	start := claims.IssuedAt
-	if claims.NotBefore != nil {
-		start = claims.NotBefore
+	start, err := claims.GetNotBefore()
+	if err != nil || start == nil {
+		start, err = claims.GetIssuedAt()
+		if err != nil || start == nil {
+			b.Print(s.Fail("?"))
+		}
 	}
-	if start != nil {
-		b.WriteString(s.TimeOkExpired(start.Time, true))
+	if err == nil && start != nil {
+		b.Print(s.TimeOkExpired(start.Time, true))
+	}
+
+	b.Print(" -> ")
+
+	if expires, err := claims.GetExpirationTime(); err == nil && expires != nil {
+		b.Print(s.TimeOkExpired(expires.Time, false))
 	} else {
-		b.WriteString(s.Fail("?"))
+		b.Print(s.Fail("?"))
 	}
 
-	b.WriteString(" -> ")
-
-	if claims.ExpiresAt != nil {
-		b.WriteString(s.TimeOkExpired(claims.ExpiresAt.Time, false))
-	} else {
-		b.WriteString(s.Fail("?"))
-	}
-
-	b.WriteString("]")
+	b.Print("]")
 
 	/* Other claims */
 
-	if claims.ID != "" {
-		fmt.Fprintf(&b, " id %s", s.Bright(claims.ID))
+	id := (*claims)["id"]
+	if idStr, ok := id.(string); ok {
+		b.Printf(" id %s", s.Bright(idStr))
 	}
 
-	if claims.Subject != "" {
-		fmt.Fprintf(&b, " subj %s", s.Addr(claims.Subject))
+	if sub, err := claims.GetSubject(); err == nil {
+		b.Printf(" subj %s", s.Addr(sub))
 	}
 
-	if claims.Issuer != "" {
-		fmt.Fprintf(&b, " iss %s", s.Addr(claims.Issuer))
+	if iss, err := claims.GetIssuer(); err == nil {
+		b.Printf(" iss %s", s.Addr(iss))
 	}
 
-	if len(claims.Audience) != 0 {
-		fmt.Fprintf(&b, " aud %s", s.List(claims.Audience, AddrStyle))
+	if auds, err := claims.GetAudience(); err == nil && len(auds) != 0 {
+		b.Printf(" aud %s", s.List(auds, AddrStyle))
 	}
+
+	return &b
+}
+
+func (s TtyStyler) JWTSummary(token *jwt.Token) string {
+	return s.jwtCommon(token).String()
+}
+func (s TtyStyler) JWTFull(token *jwt.Token) string {
+	b := s.jwtCommon(token)
+	claims := *token.Claims.(*jwt.MapClaims)
+
+	b.NewLine()
+	b.Indent()
+	b.Tabs()
+
+	// The set that we've already printed. Not quite the Registered ones, because we also print ID, which isn't in that list
+	specialClaims := map[string]bool{
+		"exp": true,
+		"iat": true,
+		"nbf": true,
+		"iss": true,
+		"sub": true,
+		"aud": true,
+		"id":  true,
+	}
+	for k, v := range claims {
+		if !specialClaims[k] {
+			b.Printf("%s: %v; ", k, v)
+		}
+	}
+
+	b.Dedent()
 
 	return b.String()
 }

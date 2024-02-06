@@ -82,7 +82,7 @@ func JWTNoSignature(str string) (token *jwt.Token, tokenErr error) {
 	// We have no key to verify the signature, so parse and verify *nothing* (our only option)
 	token, _, tokenErr = parser.ParseUnverified(
 		str,
-		&jwt.RegisteredClaims{},
+		&jwt.MapClaims{},
 	)
 
 	// TODO: validate the claims, when validation function is public
