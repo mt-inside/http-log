@@ -48,7 +48,7 @@ func JWT(ctx context.Context, r *http.Request, validateKey crypto.PublicKey) (to
 		if validateKey != nil {
 			token, tokenErr = parser.ParseWithClaims(
 				str,
-				&jwt.RegisteredClaims{},
+				&jwt.MapClaims{},
 				func(token *jwt.Token) (interface{}, error) { return validateKey, nil },
 			)
 		} else {
@@ -57,7 +57,7 @@ func JWT(ctx context.Context, r *http.Request, validateKey crypto.PublicKey) (to
 			// The function to do that claims validation is private in the v5 API, with a comment saying it might be made public later (in v4 we could call it)
 			token, _, tokenErr = parser.ParseUnverified(
 				str,
-				&jwt.RegisteredClaims{},
+				&jwt.MapClaims{},
 			)
 			// TODO: validate the claims, when validation function is public
 		}

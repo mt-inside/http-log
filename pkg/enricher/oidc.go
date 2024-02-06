@@ -104,7 +104,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 
 	token, _, err = parser.ParseUnverified(
 		cookie.Value,
-		&jwt.RegisteredClaims{},
+		&jwt.MapClaims{},
 	)
 
 	if errors.Is(err, jwt.ErrTokenMalformed) {
@@ -239,7 +239,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 
 	token, err = parser.ParseWithClaims(
 		cookie.Value,
-		&jwt.RegisteredClaims{},
+		&jwt.MapClaims{},
 		func(token *jwt.Token) (interface{}, error) {
 			kid := token.Header["kid"].(string)
 			jwksKey, ok := pubKeys[kid]
