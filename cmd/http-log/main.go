@@ -1,5 +1,21 @@
 package main
 
+/* TODO: all your proxy options. Do we really wanna be terminating SOCKS? Maybe we do. Should handle connect and connect-udp at least.
+* - "reguular" TCP/UDP proxy - ie packet forwarder, static config to host:port
+* - SOCKS - dynamic, target in plaintext
+* - CONNECT - tcp only. target encrypted if you're over https
+* - CONNECT-UDP - now an IETF standard (along with HTTP DATAGRAMs and Capsules etc)
+*   - QUIC Datagrams - for sending data *unreliably* over quic, so that quic-in-quic doesn't do double recovery and double congestion control
+*   - h2 datagrams atop that
+* - [h2&h3] Extended CONNECT - what's this?
+* - proxy protocol
+*
+* TODO: should serve its JWKS document over HTTP, in the proper .well-known/whatever place you'd expect to find it
+* - optional, cause people might want that path logging instead
+ */
+
+// TODO: h3 test servers (more for p-c): google, youtube, cloudflare-quic.com
+
 import (
 	"context"
 	"crypto/tls"
