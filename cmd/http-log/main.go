@@ -356,6 +356,14 @@ func main() {
 			// need to detect conn re-use somehow, and bump reqNo (and make new structs etc) on transition to active (but re-use the tcp info from the conn going to new omg)
 			// - but it goes idle >1 time. When? Seen: h2c's h2 upgrade (PRI or h1:Upgrade); TLS handshake
 			// when this is fixed, can put istio-demo back to h2 (appProto http2, h2UpgradePolicy)
+			// Sketch solution:
+			// - fact: we print on conn close (ie at the transport layer) so we catch all requests, even if they don't make it very far
+			// - print at the end of the http handler (think we used to do this). This will catch a lot of cases, including http error-codes
+			// - also print on conn_closed, to catch things that have error'd before http handler got to see them (eg TLS handshake).
+			//   - thesis is that everything that didn't make it to the http handler is enough of an error to cause the connection to be closed (cause it's tcp and below, and that only happens once per conn, so without it there can be no conn)
+			//   - in the conn_close handler, check the connection number and ignore it if we've already printed it
+			// - as a backstop, set idle timeout waay shorter (rather than running the timer ourself) - need to check if that actually works, or if h2 keepalives reset it
+			//   - can't be too short, else we'll time out slow clients
 			if cs == http.StateClosed {
 				srvData := ctxt.SrvDataFromContext(ctx)
 				reqData := ctxt.ReqDataFromContext(ctx)
@@ -364,6 +372,13 @@ func main() {
 
 				delete(hackStore, c.RemoteAddr())
 				log.Debug("Connection closed; removing entry from hackStore", "remoteAddr", c.RemoteAddr())
+			}
+			// FIXME: for now we over-print, better than under-printing
+			if cs == http.StateIdle {
+				srvData := ctxt.SrvDataFromContext(ctx)
+				reqData := ctxt.ReqDataFromContext(ctx)
+				respData := ctxt.RespDataFromContext(ctx)
+				op.Output(srvData, reqData, respData)
 			}
 		},
 	}
