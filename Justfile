@@ -4,6 +4,7 @@ default:
 	@just --list --unsorted --color=always
 
 DH_USER := "mtinside"
+CMD := "http-log"
 GH_USER := "mt-inside"
 DH_REPO := "docker.io/" + DH_USER + "/http-log"
 GH_REPO := "ghcr.io/" + GH_USER + "/http-log"
@@ -55,6 +56,9 @@ build-ci *ARGS:
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
 	zip http-log-lambda.zip http-log-lambda
+
+install: test
+	CGO_ENABLED=0 go install {{LD_COMMON}} ./cmd/{{CMD}}
 
 package: test
 	# if there's >1 package in this directory, apko seems to pick the _oldest_ without fail
