@@ -60,6 +60,7 @@ func JWT(ctx context.Context, r *http.Request, validateKey crypto.PublicKey) (to
 				&jwt.MapClaims{},
 			)
 			// TODO: validate the claims, when validation function is public
+			// - looks like this has been done in jwt v5.2: https://pkg.go.dev/github.com/golang-jwt/jwt/v5#Validator
 		}
 		if errors.Is(tokenErr, jwt.ErrTokenMalformed) {
 			// It's not a JWT in this location, keep looking in the others
