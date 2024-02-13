@@ -7,6 +7,7 @@ contents:
   packages:
     - wolfi-baselayout
     - ca-certificates-bundle
+    # - busybox # if you need a shell, eg to run `kubectl sniff` in here
     - http-log
 
 accounts:
