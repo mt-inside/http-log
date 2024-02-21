@@ -29,11 +29,11 @@ func ParsePublicKey(key []byte) (crypto.PublicKey, error) {
 	return parsedKey, nil
 }
 
-func ParseCertificate(cert []byte) (*x509.Certificate, error) {
+func ParseCertificate(bytes []byte) (*x509.Certificate, error) {
 	var err error
 
 	var block *pem.Block
-	if block, _ = pem.Decode(cert); block == nil {
+	if block, _ = pem.Decode(bytes); block == nil {
 		return nil, errors.New("file does not contain PEM-encoded data")
 	}
 
@@ -41,6 +41,25 @@ func ParseCertificate(cert []byte) (*x509.Certificate, error) {
 		return cert, nil
 	}
 	return nil, err
+}
+
+func ParseCertificates(bytes []byte) ([]*x509.Certificate, error) {
+	rest := bytes
+	var certs []*x509.Certificate
+	var block *pem.Block
+	for len(rest) != 0 {
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			return nil, errors.New("file contains non PEM data")
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, cert)
+	}
+
+	return certs, nil
 }
 
 func HeadFromCertificate(cert *tls.Certificate) *x509.Certificate {
