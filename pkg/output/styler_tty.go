@@ -271,19 +271,20 @@ func (s TtyStyler) List(ins []string, style aurora.Color) string {
 
 	for i, in := range ins {
 		newPrintLen := printLen + len(in) // without the escape sequences
-		if i != len(ins)-1 {
-			newPrintLen += len(", ")
-		}
-
 		if newPrintLen > printWidth {
 			b.WriteString(s.au.Colorize(in[:printWidth-printLen], style).String())
 			b.WriteString("...")
 			break
 		}
-
 		b.WriteString(s.au.Colorize(in, style).String())
+
 		if i != len(ins)-1 {
-			b.WriteString(", ")
+			newPrintLen += len(", ")
+			if newPrintLen > printWidth {
+				break
+			} else {
+				b.WriteString(", ")
+			}
 		}
 
 		printLen = newPrintLen
