@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,6 +40,8 @@ import (
 	"github.com/tetratelabs/telemetry/scope"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	"github.com/mt-inside/go-jwks"
 
 	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/internal/ctxt"
@@ -131,7 +134,7 @@ func main() {
 		Key             string `short:"k" long:"key" optional:"yes" description:"Path to TLS server key. Setting this implies serving https"`
 		TLSAlgo         string `short:"K" long:"self-signed-tls" choice:"off" choice:"rsa" choice:"ecdsa" choice:"ed25519" default:"off" optional:"yes" optional-value:"rsa" description:"Generate and present a self-signed TLS certificate? No flag / -k=off: plaintext. -k: TLS with RSA certs. -k=foo TLS with $foo certs"`
 		ClientCA        string `short:"C" long:"ca" optional:"yes" description:"Path to TLS client CA certificate"`
-		JWTValidatePath string `short:"j" long:"jwt-validate-key" description:"Path to a PEM-encoded [rsa,ecdsa,ed25519] public key used to validate JWTs"`
+		JWTValidatePath string `short:"j" long:"jwt-validate-key" description:"Path to a [JWK[S],PEM]-encoded (determined by file extension) [rsa,ecdsa,ed25519] public key used to validate JWTs"`
 
 		/* Output options */
 		Output string `short:"o" long:"output" description:"Log output format" choice:"auto" choice:"pretty" choice:"text" choice:"json" default:"auto"`
@@ -282,8 +285,25 @@ func main() {
 	if opts.JWTValidatePath != "" {
 		bytes, err := os.ReadFile(opts.JWTValidatePath)
 		b.Unwrap(err)
-		srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
-		b.Unwrap(err)
+		switch filepath.Ext(opts.JWTValidatePath) {
+		case ".jwks":
+			keys, err := jwks.JWKS2KeysMap(bytes)
+			b.Unwrap(err)
+			for kid, key := range keys {
+				srvData.AuthJwtValidateKey = key
+				if len(keys) > 1 {
+					b.PrintWarn(fmt.Sprintf("JWKS contains >1 key; randomly using key id %s", kid))
+				}
+				break
+			}
+		case ".jwk":
+			key, err := jwks.JWK2Key(bytes)
+			b.Unwrap(err)
+			srvData.AuthJwtValidateKey = key
+		default:
+			srvData.AuthJwtValidateKey, err = codec.ParsePublicKey(bytes)
+			b.Unwrap(err)
+		}
 	}
 
 	loggingMux := handlers.NewLogMiddle(
