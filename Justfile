@@ -12,7 +12,8 @@ TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
 LD_COMMON := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "'\""
-LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "' -w -linkmode external -extldflags '-static'\""
+LD_RELEASE := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "' -w -s\""
+LD_STATIC := "-ldflags \"-X 'github.com/mt-inside/http-log/internal/build.Version=" + TAGD + "' -linkmode external -extldflags '-static'\""
 MELANGE := "melange"
 APKO    := "apko"
 
@@ -51,7 +52,7 @@ build-ci *ARGS:
 	# Ideally we'd use CGO, because the libc/nsswitch-based name resolution is probably very useful for some people.
 	# However, it's very difficult to cross-compile, and would ideally be statically-linked, for which instructions vary on mac etc.
 	# TODO: fix this properly; don't use Go's cross-compilation, rather build native under emulation (though ig that's difficult cause where's the target libc gonna come from?)
-	CGO_ENABLED=0 go build {{LD_COMMON}} -v {{ARGS}} ./cmd/http-log
+	CGO_ENABLED=0 go build {{LD_RELEASE}} -v {{ARGS}} ./cmd/http-log
 
 build-lambda: test
 	CGO_ENABLED=0 GOOS=linux go build -o http-log-lambda ./cmd/lambda
