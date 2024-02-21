@@ -18,6 +18,7 @@ type logger struct {
 	now    func() time.Time
 }
 
+// Logs to stderr
 func New() telemetry.Logger {
 	lg := &logger{}
 
