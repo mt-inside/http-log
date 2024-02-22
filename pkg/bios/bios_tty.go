@@ -3,6 +3,7 @@ package bios
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/mt-inside/http-log/internal/build"
 	"github.com/mt-inside/http-log/pkg/output"
@@ -17,10 +18,19 @@ func NewTtyBios(s output.TtyStyler) TtyBios {
 }
 
 func (b TtyBios) Version() {
+	h, err := os.Hostname()
+	if err != nil {
+		h = "<unknown hostname>"
+	}
 	fmt.Printf(
-		"%s\n",
+		"%s %s %s %s %s/%s\n",
 		// TODO: build time
-		b.s.Noun(build.NameAndVersion()),
+		b.s.Noun(build.Name),
+		b.s.Number(build.Version),
+		b.s.Number(runtime.Version()),
+		b.s.Addr(h),
+		b.s.Noun(runtime.GOOS),
+		b.s.Noun(runtime.GOARCH),
 	)
 }
 
