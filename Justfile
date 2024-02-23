@@ -6,8 +6,8 @@ default:
 DH_USER := "mtinside"
 CMD := "http-log"
 GH_USER := "mt-inside"
-DH_REPO := "docker.io/" + DH_USER + "/http-log"
-GH_REPO := "ghcr.io/" + GH_USER + "/http-log"
+DH_REPO := "docker.io/" + DH_USER + "/" + CMD
+GH_REPO := "ghcr.io/" + GH_USER + "/" + CMD
 TAG := `git describe --tags --always --abbrev`
 TAGD := `git describe --tags --always --abbrev --dirty --broken`
 CGR_ARCHS := "amd64,aarch64" # ,x86,armv7 - will fail cause no wolfi packages for these archs
