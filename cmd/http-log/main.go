@@ -36,6 +36,9 @@ import (
 	"github.com/logrusorgru/aurora/v3"
 	"github.com/mattn/go-isatty"
 	"github.com/pires/go-proxyproto"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tetratelabs/telemetry"
 	"github.com/tetratelabs/telemetry/scope"
 	"golang.org/x/net/http2"
@@ -69,6 +72,9 @@ func init() {
 
 var requestNo uint64
 var log = scope.Register("main", "logs from the main package")
+var metricRequests = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "httplog_requests",
+})
 
 // TODO: cobra + viper(? - go-flags is really nice)
 func main() {
@@ -114,11 +120,12 @@ func main() {
 	var opts struct {
 		// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
 
-		/* Logging */
+		/* Admin */
 		Verbosity string `short:"v" long:"verbosity" description:"log verbosity. Does not affect final output" choice:"none" choice:"error" choice:"info" choice:"debug" default:"error"`
+		AdminAddr string `long:"admin-addr" description:"Listen address for the admin port eg 127.0.0.1:8081" default:":8081"`
 
 		/* Network options */
-		ListenAddr    string        `short:"a" long:"addr" description:"Listen address eg 127.0.0.1:8080" default:":8080"`
+		ListenAddr    string        `short:"a" long:"addr" description:"Listen address eg 0.0.0.0:8080" default:":8080"`
 		HandleTimeout time.Duration `long:"timeout" description:"Timeout for each of request reading and response writing" default:"60s"`
 		Timeout       time.Duration `long:"handle-timeout" description:"Timeout for network fetches used to encrich the output" default:"10s"`
 		Http11        bool          `long:"http-11" description:"Force http/1.1 (disallow TLS ALPN negotiation of http2)"`
@@ -214,17 +221,22 @@ func main() {
 
 	b.Version()
 
-	// TODO: add /quitquitquit
-	// TODO: take port for this as an arg (with default), error if this port == service port
 	go func() {
 		startTime := time.Now().UTC()
+
 		r := http.NewServeMux()
 		r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			j, _ := json.Marshal(map[string]string{"health": "ok", "name": build.Name, "version": build.Version, "started": fmt.Sprintf("%v", startTime), "uptime": fmt.Sprintf("%v", time.Since(startTime))})
 			_, _ = w.Write(j)
 		})
+		r.HandleFunc("/quitquitquit", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("quitting"))
+			os.Exit(0)
+		})
+		r.Handle("/metrics", promhttp.Handler())
+
 		srv := &http.Server{
-			Addr:    ":8081",
+			Addr:    opts.AdminAddr,
 			Handler: r,
 		}
 		_ = srv.ListenAndServe()
@@ -352,6 +364,8 @@ func main() {
 			respData := state.NewResponseData()
 
 			requestNo++ // Think everything is single-threaded... TODO really can't assume that.
+			metricRequests.Set(float64(requestNo))
+
 			ctx = telemetry.KeyValuesToContext(ctx, "request", requestNo)
 			log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 			log.Info("Accepting tcp connection") // TODO: these needs to use "tcp" / "http"-scoped loggers. The fact they don't have them tells you they shouldn't be here, prolly should in extractors?
