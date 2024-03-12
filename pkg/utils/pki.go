@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"github.com/tetratelabs/telemetry"
-
-	"github.com/mt-inside/http-log/internal/build"
 )
 
 var (
@@ -178,16 +176,16 @@ func genCertPair(ctx context.Context, settings *x509.Certificate, parent *tls.Ce
 	return &pair, err
 }
 
-func GenSelfSignedCa(ctx context.Context, algo string) (*tls.Certificate, error) {
+func GenSelfSignedCa(ctx context.Context, algo string, binName string) (*tls.Certificate, error) {
 
 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 	log.Info("Generating CA cert")
 
 	caSettings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("%s self-signed CA", build.Name),
+			CommonName: fmt.Sprintf("%s self-signed CA", binName),
 		},
-		DNSNames:              []string{"ca"},
+		DNSNames:              []string{"ca"}, // CA cert shouldn't really have SANs, but we (horribly) use this value as the cache key
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(0, 1, 0),
 		IsCA:                  true,
@@ -199,7 +197,7 @@ func GenSelfSignedCa(ctx context.Context, algo string) (*tls.Certificate, error)
 	return genCertPair(ctx, caSettings, nil, algo)
 }
 
-func GenServingCert(ctx context.Context, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string) (*tls.Certificate, error) {
+func GenServingCert(ctx context.Context, helloInfo *tls.ClientHelloInfo, parent *tls.Certificate, algo string, binName string) (*tls.Certificate, error) {
 
 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 	log.Info("Generating self-signed serving cert")
@@ -209,9 +207,9 @@ func GenServingCert(ctx context.Context, helloInfo *tls.ClientHelloInfo, parent 
 		dnsName = helloInfo.ServerName
 	}
 
-	servingSettings := &x509.Certificate{
+	settings := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: build.Name,
+			CommonName: fmt.Sprintf("%s self-signed serving cert", binName),
 		},
 		DNSNames: []string{dnsName},
 		// IPAddresses:    []net.IP{net.IPv4(1, 2, 3, 4)},
@@ -220,9 +218,32 @@ func GenServingCert(ctx context.Context, helloInfo *tls.ClientHelloInfo, parent 
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(0, 0, 1),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	return genCertPair(ctx, servingSettings, parent, algo)
+	return genCertPair(ctx, settings, parent, algo)
+}
+
+func GenClientCert(ctx context.Context, dnsName string, parent *tls.Certificate, algo string, binName string) (*tls.Certificate, error) {
+
+	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
+	log.Info("Generating self-signed client cert")
+
+	settings := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("%s self-signed client cert", binName),
+		},
+		DNSNames: []string{dnsName},
+		// IPAddresses:    []net.IP{net.IPv4(1, 2, 3, 4)},
+		// URIs: []*url.URL{&url.URL{Scheme: "spiffe", Host: "trust.domain", Path: "/ns/foo/sa/bar"}},
+		// EmailAddresses: []string{"root@cia.gov"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().AddDate(0, 0, 1),
+		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+
+	return genCertPair(ctx, settings, parent, algo)
 }
