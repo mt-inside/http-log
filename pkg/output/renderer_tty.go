@@ -318,8 +318,6 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 
 	if len(d.HttpCookies) > 0 {
 		fmt.Println("Cookies")
-	} else {
-		fmt.Println("No Cookies")
 	}
 	for n, c := range d.HttpCookies {
 		val := c.Value
