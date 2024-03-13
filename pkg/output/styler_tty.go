@@ -380,11 +380,11 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 // - Print SAN info (the only difference between ServingCertChain and ClientCertChain ?)
 // - Verify an addr (parse as either ip or name) against the SANs & CN
 // TODO: builder pattern (and verifiedCertChain)
-func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb func(cert *x509.Certificate) string) string {
+func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, systemRoots bool, headCb func(cert *x509.Certificate) string) string {
 	var b IndentingBuilder
 
 	head := chain[0]
-	b.Linef("0: PRESENTED %s", s.CertSummary(head))
+	b.Linef("0: %s", s.CertSummary(head))
 	if headCb != nil {
 		b.Indent()
 		b.Block(headCb(head))
@@ -406,7 +406,11 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb fu
 				// The only way I can think of to determine that is to try to validate chain[0:0], chain[0:1] etc until it validates, at which point you know 0<x<n were presented only, n<x<len(chain) were presented and installed, and len(chain)<x<len(verified) were installed only
 				b.Print("PRESENTED")
 			} else {
-				b.Print("INSTALLED")
+				if systemRoots {
+					b.Print("INSTALLED")
+				} else {
+					b.Print("PROVIDED")
+				}
 			}
 		}
 
@@ -420,13 +424,13 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb fu
 }
 
 func (s TtyStyler) ServingCertChain(chain []*x509.Certificate) string {
-	return s.certChain(chain, nil, s.certSansRenderer)
+	return s.certChain(chain, nil, false, s.certSansRenderer)
 }
 func (s TtyStyler) ClientCertChain(chain []*x509.Certificate) string {
-	return s.certChain(chain, nil, nil)
+	return s.certChain(chain, nil, false, nil)
 }
 
-func (s TtyStyler) VerifiedCertChain(
+func (s TtyStyler) verifiedCertChain(
 	chain []*x509.Certificate,
 	caCert *x509.Certificate,
 	validateAddr string,
@@ -470,7 +474,7 @@ func (s TtyStyler) VerifiedCertChain(
 
 	if err != nil {
 		// Cert isn't valid: just print it and any chain it came with
-		b.Block(s.certChain(chain, nil, headCb)) // TODO: print only the head cert in non-verbose mode (same in the other branch)
+		b.Block(s.certChain(chain, nil, false, headCb)) // TODO: print only the head cert in non-verbose mode (same in the other branch)
 		b.NewLine()
 	} else {
 		// Cert is valid: print any and all paths to validation
@@ -480,7 +484,7 @@ func (s TtyStyler) VerifiedCertChain(
 		b.Line("Validation chain(s):")
 		b.Indent()
 		for _, validChain := range validChains {
-			b.Block(s.certChain(chain, validChain, headCb))
+			b.Block(s.certChain(chain, validChain, caCert == nil, headCb))
 			b.NewLine()
 		}
 		b.Dedent()
@@ -505,10 +509,10 @@ func (s TtyStyler) VerifiedCertChain(
 }
 
 func (s TtyStyler) VerifiedServingCertChain(chain []*x509.Certificate, caCert *x509.Certificate, validateAddr string, verbose bool) string {
-	return s.VerifiedCertChain(chain, caCert, validateAddr, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, s.certSansRenderer, verbose)
+	return s.verifiedCertChain(chain, caCert, validateAddr, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, s.certSansRenderer, verbose)
 }
 func (s TtyStyler) VerifiedClientCertChain(chain []*x509.Certificate, caCert *x509.Certificate, verbose bool) string {
-	return s.VerifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, verbose)
+	return s.verifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, verbose)
 }
 
 func (s TtyStyler) jwtCommon(token *jwt.Token) *IndentingBuilder {
