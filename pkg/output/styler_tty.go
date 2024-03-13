@@ -384,7 +384,7 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb fu
 	var b IndentingBuilder
 
 	head := chain[0]
-	b.Linef("0: %s", s.CertSummary(head))
+	b.Linef("0: PRESENTED %s", s.CertSummary(head))
 	if headCb != nil {
 		b.Indent()
 		b.Block(headCb(head))
@@ -402,6 +402,8 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, headCb fu
 
 		if verifiedCerts != nil {
 			if i < len(chain) && certs[i].Equal(chain[i]) {
+				// TODO: any of these might also be installed, would be great to print that too if it's true.
+				// The only way I can think of to determine that is to try to validate chain[0:0], chain[0:1] etc until it validates, at which point you know 0<x<n were presented only, n<x<len(chain) were presented and installed, and len(chain)<x<len(verified) were installed only
 				b.Print("PRESENTED")
 			} else {
 				b.Print("INSTALLED")
@@ -446,13 +448,13 @@ func (s TtyStyler) VerifiedCertChain(
 		Intermediates: x509.NewCertPool(),
 		KeyUsages:     validateUsage,
 	}
+	for _, cert := range chain[1:] {
+		opts.Intermediates.AddCert(cert)
+	}
 	if caCert != nil {
 		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify. Ie can't give an _empty_ opts.Roots
 		opts.Roots = x509.NewCertPool()
 		opts.Roots.AddCert(caCert)
-	}
-	for _, cert := range chain[1:] {
-		opts.Intermediates.AddCert(cert)
 	}
 
 	if verbose {
@@ -477,8 +479,8 @@ func (s TtyStyler) VerifiedCertChain(
 		// - NewLine method too
 		b.Line("Validation chain(s):")
 		b.Indent()
-		for _, chain := range validChains {
-			b.Block(s.certChain(chain, chain, headCb))
+		for _, validChain := range validChains {
+			b.Block(s.certChain(chain, validChain, headCb))
 			b.NewLine()
 		}
 		b.Dedent()
