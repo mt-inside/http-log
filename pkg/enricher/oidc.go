@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/tetratelabs/telemetry"
@@ -86,15 +87,59 @@ import (
 func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
 
+	// Recall:
+	// - access-token: whatever you need to access the cloud-provider's API on this user's behalf. Opaque - might be a JWT, might not
+	// - id-token: oidc thing, jwt - info about the user that got authN'd.
+	//   - oidc says this only has to contain authN info - what's their `sub` (again opaque), in addition to which IdP auth'd them, what's the aud, etc
+	//   - may also contain info about the user you could use for authz, like their name and email.
+	//     - or you may have to go get/augment that from the /userinfo endpoint (auth'ing with the access token)
+	// These can all arrive in any number of places. Worse, since access-tokens are opaque, they can't be recognised
+	// - eg
+	//   - EG
+	//     - access-token: header Authorization Bearer
+	//     - id-token: cookie IdToken
+	//   - istio-eco/authservice (example config)
+	//     - access-token: header x-access-token
+	//     - id-token: header Authorization Bearer
+
 	if ctx.Err() != nil {
 		log.Info("Not fetching any OIDC info", "reason", ctx.Err())
 		return false, ctx.Err(), nil, nil
 	}
 
-	cookie := d.HttpCookies["IdToken"]
-	if cookie == nil {
+	// ===
+	// Find access and id-tokens
+	// ===
+
+	authBearer := ""
+	authHeader := d.HttpHeaders.Get("Authorization")
+	authHeaderParts := strings.Split(authHeader, " ")
+	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+		log.Debug("Authorization header doesn't contain a bearer token")
+	} else {
+		authBearer = authHeaderParts[1]
+	}
+
+	// TODO: try x-access-token
+	accessToken := authBearer
+	if accessToken == "" {
+		log.Info("Can't find access token. Tried: header Authorization")
 		return false, nil, nil, nil
 	}
+	log.Debug("Extracted access token", "token", accessToken)
+
+	idToken := ""
+	if d.HttpCookies["IdToken"] != nil {
+		idToken = d.HttpCookies["IdToken"].Value
+	}
+	if idToken == "" {
+		idToken = d.HttpHeaders.Get("X-Id-Token")
+		if idToken == "" {
+			log.Info("Can't find ID token. Tried: cookie IdToken, header X-Id-Token")
+			return false, nil, nil, nil
+		}
+	}
+	log.Debug("Extracted ID token", "token", idToken)
 
 	// ===
 	// First parse
@@ -103,7 +148,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	parser := jwt.NewParser()
 
 	token, _, err = parser.ParseUnverified(
-		cookie.Value,
+		idToken,
 		&jwt.MapClaims{},
 	)
 
@@ -138,7 +183,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 		return true, err, token, nil
 	}
 	oidcDiscoRequest.Header.Set("User-Agent", build.NameAndVersion())
-	oidcDiscoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
+	oidcDiscoRequest.Header.Set("Authorization", "Bearer "+accessToken)
 	log.Info("Fetching OIDC Discovery Document", "url", oidcDiscoURI)
 	oidcDiscoResp, err := oidcClient.Do(oidcDiscoRequest)
 	if err != nil {
@@ -176,7 +221,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	}
 	// TODO factor out with above
 	oidcUserinfoRequest.Header.Set("User-Agent", build.NameAndVersion())
-	oidcUserinfoRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
+	oidcUserinfoRequest.Header.Set("Authorization", "Bearer "+accessToken)
 	log.Info("Fetching OIDC Userinfo", "url", oidcUserinfoRequest.URL)
 	oidcUserinfoResp, err := oidcClient.Do(oidcUserinfoRequest)
 	if err != nil {
@@ -209,7 +254,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	}
 	// TODO factor out with above
 	oidcJWKSRequest.Header.Set("User-Agent", build.NameAndVersion())
-	oidcJWKSRequest.Header.Set("Authorization", d.HttpHeaders.Get("Authorization")) // assuming it must be there since we've detected we're beind and OIDC flow
+	oidcJWKSRequest.Header.Set("Authorization", "Bearer "+accessToken)
 	log.Info("Fetching OIDC JWKS", "url", oidcJWKSRequest.URL)
 	oidcJWKSResp, err := oidcClient.Do(oidcJWKSRequest)
 	if err != nil {
@@ -238,7 +283,7 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	// ===
 
 	token, err = parser.ParseWithClaims(
-		cookie.Value,
+		idToken,
 		&jwt.MapClaims{},
 		func(token *jwt.Token) (interface{}, error) {
 			kid := token.Header["kid"].(string)

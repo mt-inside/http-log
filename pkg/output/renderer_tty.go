@@ -329,12 +329,6 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(o.s.Truncate(val)))
 	}
 
-	if d.AuthOIDC {
-		fmt.Printf("%s OIDC\n", o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil))
-		fmt.Printf("\tDiscovery: IdToken sig algos %s; Supported claims %s\n", o.s.List(d.AuthOIDCDiscoSupportedSigs, NounStyle), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)))
-		fmt.Printf("\tExtra Userinfo (%s/%s): %s\n", o.s.Number(len(d.AuthOIDCUserinfo)), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)), o.s.Map(d.AuthOIDCUserinfo, NounStyle))
-	}
-
 	if d.AuthJwt != nil {
 		fmt.Printf("%s %s\n", o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil), o.s.JWTSummary(d.AuthJwt))
 
@@ -346,6 +340,12 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 		fmt.Printf("\tSignature %s (hash %s)\n", o.s.Noun(sigAlgo), o.s.Noun(hashAlgo))
 
 		fmt.Printf("\tvalid? %s\n", o.s.YesError(d.AuthJwtErr))
+	}
+
+	if d.AuthOIDC {
+		fmt.Printf("%s OIDC\n", o.s.Timestamp(d.HttpRequestTime, TimestampAbsolute, nil))
+		fmt.Printf("\tDiscovery: IdToken sig algos %s; Supported claims %s\n", o.s.List(d.AuthOIDCDiscoSupportedSigs, NounStyle), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)))
+		fmt.Printf("\tExtra Userinfo (%s/%s): %s\n", o.s.Number(len(d.AuthOIDCUserinfo)), o.s.Number(len(d.AuthOIDCDiscoSupportedClaims)), o.s.Map(d.AuthOIDCUserinfo, NounStyle))
 	}
 
 	// TODO: print the path the req has come on: x-forwarded-for, via, etc
