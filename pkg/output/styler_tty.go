@@ -496,7 +496,7 @@ func (s TtyStyler) verifiedCertChain(
 		}
 		b.Linef("Requested SNI (%s) in DNS/IP SANs? %s; in CN? %s",
 			s.au.Colorize(validateAddr, AddrStyle),
-			s.YesError(head.VerifyHostname(validateAddr)),
+			s.YesError(head.VerifyHostname(validateAddr)), // TODO: strip any port, and iff IP wrap in []
 			s.YesInfo(strings.EqualFold(head.Subject.CommonName, validateAddr)),
 		)
 	}

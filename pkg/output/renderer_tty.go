@@ -61,6 +61,10 @@ func NewTtyRenderer(s TtyStyler, opOpts RendererOpts) TtyRenderer {
 }
 
 func (o TtyRenderer) Output(srvData *state.DaemonData, reqData *state.RequestData, respData *state.ResponseData) {
+	// TODO: like print-cert, we need to get an idea of "how far we got" through these stages, and only print the appropriate ones
+	// - eg if something fails we often end up printing lots of ugly <nones>
+	// - and sometimes it crashes, eg run -K=ecdsa (self-sign enabled), and hit it with a plaintext request. Something somewhere emits "http: TLS handshake error from 10.244.120.92:48838: tls: first record does not look like a TLS handshake", but then we try to print TLS stuff, and as it happens, blow up on r.TlsNegServerCert being nil
+
 	if o.opOpts.ConnectionSummary {
 		o.TransportSummary(reqData)
 	} else if o.opOpts.ConnectionFull {

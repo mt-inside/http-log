@@ -16,6 +16,12 @@ package main
 
 // TODO: h3 test servers (more for p-c): google, youtube, cloudflare-quic.com
 
+/* TODO: --who-am-i option, for the server startup and the response body to use envbin lib and print (if applicable):
+* - cloud provider one-line info
+* - k8s info, one line for CP, one for Node, one for Pod (with sidecar info)
+* - one line ext IP info
+ */
+
 import (
 	"context"
 	"crypto/tls"
@@ -398,6 +404,19 @@ func main() {
 			//   - in the conn_close handler, check the connection number and ignore it if we've already printed it
 			// - as a backstop, set idle timeout waay shorter (rather than running the timer ourself) - need to check if that actually works, or if h2 keepalives reset it
 			//   - can't be too short, else we'll time out slow clients
+			// Sketch arch:
+			// - have a connection_manager class (owns hackStore)
+			// - gets all the conn state change events, plus calls from eg http handler saying done
+			//   - make these done(stage String) (eg done("http")), err(stage) eg err("tls")
+			// - just log the events, and print the connection table for now, to see what's going on
+			// - this is actually a RequestManager
+			//   - we naievly assumed that a request ending is signaled by a connection ending
+			//   - track connections, and requests, and assign reqs to conns
+			//   - conn closing closes all the requests under it
+			//   - req_new is gonna be like the tls hi handler, or http handler for non-tls?
+			//   - req_err is gonna be... all error handling paths?
+			//   - req_done is gonna be end of the http handler? which one? log middle? whatever's given to stdlib. Think can just add to log_moddle, or might wanna wrap again
+			//     - how catch all errors in an http handler?
 			if cs == http.StateClosed {
 				srvData := ctxt.SrvDataFromContext(ctx)
 				reqData := ctxt.ReqDataFromContext(ctx)
