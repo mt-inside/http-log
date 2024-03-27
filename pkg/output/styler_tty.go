@@ -425,7 +425,7 @@ func (s TtyStyler) ServingCertChain(chain []*x509.Certificate) string {
 	return s.certChain(chain, nil, false, s.certSansRenderer)
 }
 func (s TtyStyler) ClientCertChain(chain []*x509.Certificate) string {
-	return s.certChain(chain, nil, false, nil)
+	return s.certChain(chain, nil, false, s.certSansRenderer) // Client certs sometimes use SANs rather than CN for the name, eg that's where Istio looks
 }
 
 func (s TtyStyler) verifiedCertChain(
@@ -510,7 +510,7 @@ func (s TtyStyler) VerifiedServingCertChain(chain []*x509.Certificate, caCert *x
 	return s.verifiedCertChain(chain, caCert, validateAddr, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, s.certSansRenderer, verbose)
 }
 func (s TtyStyler) VerifiedClientCertChain(chain []*x509.Certificate, caCert *x509.Certificate, verbose bool) string {
-	return s.verifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil, verbose)
+	return s.verifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, s.certSansRenderer, verbose)
 }
 
 func (s TtyStyler) jwtCommon(token *jwt.Token) *IndentingBuilder {
