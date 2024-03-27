@@ -380,7 +380,7 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 // - Print SAN info (the only difference between ServingCertChain and ClientCertChain ?)
 // - Verify an addr (parse as either ip or name) against the SANs & CN
 // TODO: builder pattern (and verifiedCertChain)
-func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, systemRoots bool, headCb func(cert *x509.Certificate) string) string {
+func (s TtyStyler) certChain(chain, verificationPath []*x509.Certificate, systemRoots bool, headCb func(cert *x509.Certificate) string) string {
 	var b IndentingBuilder
 
 	head := chain[0]
@@ -391,7 +391,7 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, systemRoo
 		b.Dedent()
 	}
 
-	certs := verifiedCerts
+	certs := verificationPath
 	if certs == nil {
 		certs = chain
 	}
@@ -400,21 +400,19 @@ func (s TtyStyler) certChain(chain, verifiedCerts []*x509.Certificate, systemRoo
 		b.Tabs()
 		b.Printf("%d: ", i)
 
-		if verifiedCerts != nil {
-			if i < len(chain) && certs[i].Equal(chain[i]) {
-				// TODO: any of these might also be installed, would be great to print that too if it's true.
-				// The only way I can think of to determine that is to try to validate chain[0:0], chain[0:1] etc until it validates, at which point you know 0<x<n were presented only, n<x<len(chain) were presented and installed, and len(chain)<x<len(verified) were installed only
-				b.Print("PRESENTED")
+		if verificationPath != nil && i >= len(chain) {
+			if systemRoots {
+				b.Print("INSTALLED ")
 			} else {
-				if systemRoots {
-					b.Print("INSTALLED")
-				} else {
-					b.Print("PROVIDED")
-				}
+				b.Print("PROVIDED ")
 			}
+		} else {
+			// TODO: any of these might also be installed, would be great to print that too if it's true.
+			// The only way I can think of to determine that is to try to validate chain[0:0], chain[0:1] etc until it validates, at which point you know 0<x<n were presented only, n<x<len(chain) were presented and installed, and len(chain)<x<len(verified) were installed only
+			b.Print("PRESENTED ")
 		}
 
-		b.Printf(" %s", s.CertSummary(certs[i]))
+		b.Printf("%s", s.CertSummary(certs[i]))
 		b.NewLine()
 	}
 
