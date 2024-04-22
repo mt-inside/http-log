@@ -326,9 +326,9 @@ func (o TtyRenderer) HeadFull(d *state.RequestData) {
 	for n, c := range d.HttpCookies {
 		val := c.Value
 		decoded := ""
-		if b64, err := base64.StdEncoding.DecodeString(val); err == nil {
-			val = string(b64)
-			decoded = " (decoded base64)"
+		// Don't actually print the decoded base64, cause it's likely to contain non-printing chars
+		if _, err := base64.StdEncoding.DecodeString(val); err == nil {
+			decoded = " (valid base64)"
 		}
 		fmt.Printf("\t%s%s = %s\n", o.s.Addr(n), decoded, o.s.Noun(o.s.Truncate(val)))
 	}
