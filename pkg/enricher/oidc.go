@@ -83,6 +83,24 @@ import (
 // Fetching Userinfo doc from https://foo.com/.well-known/userinfo(addr) status 200 OK (green)
 //   Userinfo: email foo(noun) name "bar baz"(noun)
 
+// TODO: move me to RequestData
+func getCookie(d *state.RequestData, name string) string {
+	if d.HttpCookies[name] != nil {
+		return d.HttpCookies[name].Value
+	}
+	return ""
+}
+
+// Returns the first found instance
+func getCookiePrefix(d *state.RequestData, prefix string) string {
+	for name := range d.HttpCookies {
+		if strings.HasPrefix(name, prefix) {
+			return getCookie(d, name)
+		}
+	}
+	return ""
+}
+
 // TODO: shouldn't return the IdToken as token, it's authN / access token metadata; should build one from the userinfo, cause that's the authz info. Or probably add userinfo into it (return a map not a Token) - flow has to work for "proper" jwt bearer tokens too
 func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error, token *jwt.Token, tokenErr error) {
 	log := log.With(telemetry.KeyValuesFromContext(ctx)...)
@@ -95,9 +113,12 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	//     - or you may have to go get/augment that from the /userinfo endpoint (auth'ing with the access token)
 	// These can all arrive in any number of places. Worse, since access-tokens are opaque, they can't be recognised
 	// - eg
-	//   - EG
+	//   - old / upstream EG
 	//     - access-token: header Authorization Bearer
 	//     - id-token: cookie IdToken
+	//   - new EG / TEG
+	//     - access-token: cookie BearerToken-foo
+	//     - id-token: cookie IdToken-foo
 	//   - istio-eco/authservice (example config)
 	//     - access-token: header x-access-token
 	//     - id-token: header Authorization Bearer
@@ -109,7 +130,11 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 
 	// ===
 	// Find access and id-tokens
+	// - we try common locations
+	// - TODO: make both user-config, eg --oidc-access-token=header:Access-Token --oidc-id-token=cookie:IdToken
 	// ===
+
+	// Access token
 
 	authBearer := ""
 	authHeader := d.HttpHeaders.Get("Authorization")
@@ -123,21 +148,25 @@ func OIDCInfo(ctx context.Context, d *state.RequestData) (found bool, err error,
 	// TODO: try x-access-token
 	accessToken := authBearer
 	if accessToken == "" {
-		log.Info("Can't find access token. Tried: header Authorization")
+		accessToken = getCookiePrefix(d, "BearerToken")
+	}
+
+	if accessToken == "" {
+		log.Info("Can't find access token. Tried: header Authorization, cookie BearerToken")
 		return false, nil, nil, nil
 	}
 	log.Debug("Extracted access token", "token", accessToken)
 
-	idToken := ""
-	if d.HttpCookies["IdToken"] != nil {
-		idToken = d.HttpCookies["IdToken"].Value
-	}
+	// ID token
+
+	idToken := getCookiePrefix(d, "IdToken")
 	if idToken == "" {
 		idToken = d.HttpHeaders.Get("X-Id-Token")
-		if idToken == "" {
-			log.Info("Can't find ID token. Tried: cookie IdToken, header X-Id-Token")
-			return false, nil, nil, nil
-		}
+	}
+
+	if idToken == "" {
+		log.Info("Can't find ID token. Tried: cookie IdToken, header X-Id-Token")
+		return false, nil, nil, nil
 	}
 	log.Debug("Extracted ID token", "token", idToken)
 
