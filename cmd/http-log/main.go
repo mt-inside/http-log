@@ -27,6 +27,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -227,27 +228,6 @@ func main() {
 
 	b.Version()
 
-	go func() {
-		startTime := time.Now().UTC()
-
-		r := http.NewServeMux()
-		r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			j, _ := json.Marshal(map[string]string{"health": "ok", "name": build.Name, "version": build.Version, "started": fmt.Sprintf("%v", startTime), "uptime": fmt.Sprintf("%v", time.Since(startTime))})
-			_, _ = w.Write(j)
-		})
-		r.HandleFunc("/quitquitquit", func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("quitting"))
-			os.Exit(0)
-		})
-		r.Handle("/metrics", promhttp.Handler())
-
-		srv := &http.Server{
-			Addr:    opts.AdminAddr,
-			Handler: r,
-		}
-		_ = srv.ListenAndServe()
-	}()
-
 	srvData := state.NewDaemonData()
 
 	// TODO: mutex status/reply vs passtrhoughURL vs passthroughAuto - no more than 1. If none are set, use the defaults for status & response
@@ -323,6 +303,39 @@ func main() {
 			b.Unwrap(err)
 		}
 	}
+
+	// Admin port. TODO factor out
+	go func() {
+		startTime := time.Now().UTC()
+
+		r := http.NewServeMux()
+		r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			j, _ := json.Marshal(map[string]string{"health": "ok", "name": build.Name, "version": build.Version, "started": fmt.Sprintf("%v", startTime), "uptime": fmt.Sprintf("%v", time.Since(startTime))})
+			_, _ = w.Write(j)
+		})
+		r.HandleFunc("/quitquitquit", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("quitting"))
+			os.Exit(0)
+		})
+		r.HandleFunc("/cacert", func(w http.ResponseWriter, r *http.Request) {
+			// Outputs as x.509 in DER in PEM
+			// - Go doesn't support rendering PKCS#12 anyway
+			block := &pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: srvData.TlsServingCertPair.Certificate[0],
+			}
+			b.Unwrap(pem.Encode(w, block))
+		})
+		r.Handle("/metrics", promhttp.Handler())
+
+		srv := &http.Server{
+			Addr:    opts.AdminAddr,
+			Handler: r,
+		}
+		_ = srv.ListenAndServe()
+
+		// TODO: gRPC admin port, serving at least gRPC health proto
+	}()
 
 	loggingMux := handlers.NewLogMiddle(
 		actionMux,
