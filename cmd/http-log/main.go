@@ -124,6 +124,25 @@ func main() {
 
 	/* == Parse and grok arguments == */
 
+	argv := make([]string, len(os.Args))
+	copy(argv, os.Args)
+
+	var configOpts struct {
+		ConfigFile string `long:"config-file"`
+	}
+	configParser := flags.NewParser(&configOpts, 0)
+	configParser.UnknownOptionHandler = func(option string, arg flags.SplitArgument, args []string) ([]string, error) {
+		// Do nothing, overriding the default handler, which prints "unknown arg" errors
+		return []string{}, nil
+	}
+	_, err := configParser.ParseArgs(os.Args)
+	if err == nil {
+		f, err := os.ReadFile(configOpts.ConfigFile)
+		if err == nil {
+			argv = strings.Split(string(f), " ")
+		}
+	}
+
 	var opts struct {
 		// TODO: take timeout for all network ops (in here and the TLSConfig too) - https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
 
@@ -155,7 +174,7 @@ func main() {
 		output.RendererOpts
 	}
 
-	_, err := flags.Parse(&opts)
+	_, err = flags.ParseArgs(&opts, argv)
 	if err != nil {
 		var flagsErr *flags.Error
 		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
@@ -185,6 +204,7 @@ func main() {
 		}
 	}
 
+	// ie defaults are: -l -m
 	if !opts.ConnectionSummary && !opts.ConnectionFull &&
 		!opts.NegotiationSummary && !opts.NegotiationFull &&
 		!opts.TLSSummary && !opts.TLSFull &&
