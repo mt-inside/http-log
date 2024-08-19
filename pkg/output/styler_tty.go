@@ -365,7 +365,7 @@ func (s TtyStyler) certSansRenderer(cert *x509.Certificate) string {
 	}
 
 	if !anySans {
-		b.Printf(s.Info(" <none>"))
+		b.Print(s.Info(" <none>"))
 	}
 
 	b.NewLine()
