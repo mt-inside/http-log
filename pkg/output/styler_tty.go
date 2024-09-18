@@ -430,7 +430,7 @@ func (s TtyStyler) ClientCertChain(chain []*x509.Certificate) string {
 
 func (s TtyStyler) verifiedCertChain(
 	chain []*x509.Certificate,
-	caCert *x509.Certificate,
+	caCerts []*x509.Certificate,
 	validateAddr string,
 	validateUsage []x509.ExtKeyUsage,
 	headCb func(cert *x509.Certificate) string,
@@ -453,17 +453,20 @@ func (s TtyStyler) verifiedCertChain(
 	for _, cert := range chain[1:] {
 		opts.Intermediates.AddCert(cert)
 	}
-	if caCert != nil {
-		// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify. Ie can't give an _empty_ opts.Roots
+	if len(caCerts) != 0 {
 		opts.Roots = x509.NewCertPool()
-		opts.Roots.AddCert(caCert)
+		for _, caCert := range caCerts {
+			opts.Roots.AddCert(caCert)
+		}
 	}
+	// If no custom CA is given, leave opts.Roots nil, which uses system roots to verify. Ie can't give an _empty_ opts.Roots
 
 	if verbose {
-		if caCert != nil {
-			b.Linef("Validating against: %s", s.CertSummary(caCert))
-		} else {
+		if len(caCerts) == 0 {
 			b.Line("Validating against system certs")
+		}
+		for _, caCert := range caCerts {
+			b.Linef("Validating against: %s", s.CertSummary(caCert))
 		}
 		b.NewLine()
 	}
@@ -482,7 +485,7 @@ func (s TtyStyler) verifiedCertChain(
 		b.Line("Validation chain(s):")
 		b.Indent()
 		for _, validChain := range validChains {
-			b.Block(s.certChain(chain, validChain, caCert == nil, headCb))
+			b.Block(s.certChain(chain, validChain, len(caCerts) == 0, headCb))
 			b.NewLine()
 		}
 		b.Dedent()
@@ -506,11 +509,11 @@ func (s TtyStyler) verifiedCertChain(
 	return b.String()
 }
 
-func (s TtyStyler) VerifiedServingCertChain(chain []*x509.Certificate, caCert *x509.Certificate, validateAddr string, verbose bool) string {
-	return s.verifiedCertChain(chain, caCert, validateAddr, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, s.certSansRenderer, verbose)
+func (s TtyStyler) VerifiedServingCertChain(chain []*x509.Certificate, caCerts []*x509.Certificate, validateAddr string, verbose bool) string {
+	return s.verifiedCertChain(chain, caCerts, validateAddr, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, s.certSansRenderer, verbose)
 }
 func (s TtyStyler) VerifiedClientCertChain(chain []*x509.Certificate, caCert *x509.Certificate, verbose bool) string {
-	return s.verifiedCertChain(chain, caCert, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, s.certSansRenderer, verbose)
+	return s.verifiedCertChain(chain, []*x509.Certificate{caCert}, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, s.certSansRenderer, verbose)
 }
 
 func (s TtyStyler) jwtCommon(token *jwt.Token) *IndentingBuilder {
