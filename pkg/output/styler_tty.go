@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -317,9 +318,17 @@ func (s TtyStyler) PublicKeySummary(key crypto.PublicKey) string {
 }
 
 func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
-	caFlag := s.Info("non-ca")
+	caInfo := ""
 	if cert.IsCA {
-		caFlag = s.Ok("ca")
+		caInfo += s.Ok("ca")
+		caInfo += ", path len "
+		if cert.MaxPathLen > 0 || cert.MaxPathLenZero {
+			caInfo += s.Number(strconv.Itoa(cert.MaxPathLen))
+		} else {
+			caInfo += s.Info("unset")
+		}
+	} else {
+		caInfo += s.Info("leaf")
 	}
 
 	return fmt.Sprintf(
@@ -330,7 +339,7 @@ func (s TtyStyler) CertSummary(cert *x509.Certificate) string {
 		s.PublicKeySummary(cert.PublicKey),
 		s.Noun(cert.SignatureAlgorithm.String()),
 		// No need to print Issuer, cause that's the Subject of the next cert in the chain
-		caFlag,
+		caInfo,
 	)
 }
 
