@@ -23,7 +23,7 @@ type TtyStyler struct {
 const (
 	printWidth = 80
 
-	timeFmt = "2006 Jan _2 15:04:05"
+	timeFmt = "2006-01-02 15:04:05"
 
 	InfoStyle aurora.Color = aurora.BlackFg | aurora.BrightFg
 	FailStyle aurora.Color = aurora.RedFg
