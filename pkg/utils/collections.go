@@ -11,6 +11,15 @@ func Map[T, U any](xs []T, f func(T) U) []U {
 
 	return ys
 }
+func MapValues[K comparable, T, U any](xs map[K]T, f func(T) U) map[K]U {
+	ys := make(map[K]U, len(xs))
+
+	for k, v := range xs {
+		ys[k] = f(v)
+	}
+
+	return ys
+}
 
 func MapToString[T fmt.Stringer](xs []T) []string {
 	return Map(xs, func(x T) string { return x.String() })
@@ -27,4 +36,12 @@ func MapAnyToString(xs []any) []string {
 			panic(fmt.Errorf("%v is not stringable", x))
 		}
 	})
+}
+
+// string doesn't satisfy Stinger...
+func MapValuesStringToAny[K comparable](xs map[K]string) map[K]any {
+	return MapValues(xs, func(x string) any { return x })
+}
+func MapValuesStringerToAny[K comparable, V fmt.Stringer](xs map[K]V) map[K]any {
+	return MapValues(xs, func(x V) any { return x })
 }
