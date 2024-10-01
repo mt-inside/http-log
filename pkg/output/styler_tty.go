@@ -305,7 +305,7 @@ func (s TtyStyler) Map(ins map[string]any, style aurora.Color) string {
 
 	for k, v := range ins {
 		b.WriteString(k)
-		b.WriteString(" ")
+		b.WriteString("=")
 		b.WriteString(s.au.Colorize(v, style).String())
 		b.WriteString(" ")
 	}
