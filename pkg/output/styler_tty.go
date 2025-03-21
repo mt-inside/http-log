@@ -525,6 +525,34 @@ func (s TtyStyler) VerifiedClientCertChain(chain []*x509.Certificate, caCert *x5
 	return s.verifiedCertChain(chain, []*x509.Certificate{caCert}, "", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, s.certSansRenderer, verbose)
 }
 
+func (s TtyStyler) CertificateRequest(csr *x509.CertificateRequest) string {
+	var b IndentingBuilder
+
+	// TODO: add algos, keys, extensions, etc from the *x509.CertificateRequest type
+
+	b.Printf("sub: %s", s.Addr(csr.Subject))
+	b.NewLine()
+
+	b.Println("SANs")
+	b.Indent()
+
+	b.Tabs()
+	b.Printf("ip: %s", s.List(utils.MapToString(csr.IPAddresses), AddrStyle))
+	b.NewLine()
+
+	b.Tabs()
+	b.Printf("dns: %s", s.List(csr.DNSNames, AddrStyle))
+	b.NewLine()
+
+	b.Tabs()
+	b.Printf("uri: %s", s.List(utils.MapToString(csr.URIs), AddrStyle))
+	b.NewLine()
+
+	b.Dedent()
+
+	return b.String()
+}
+
 func (s TtyStyler) jwtCommon(token *jwt.Token) *IndentingBuilder {
 	var b IndentingBuilder
 

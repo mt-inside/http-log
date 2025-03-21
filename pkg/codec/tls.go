@@ -29,6 +29,20 @@ func ParsePublicKey(key []byte) (crypto.PublicKey, error) {
 	return parsedKey, nil
 }
 
+func ParseCertificateRequest(bytes []byte) (*x509.CertificateRequest, error) {
+	var err error
+
+	var block *pem.Block
+	if block, _ = pem.Decode(bytes); block == nil {
+		return nil, errors.New("file does not contain PEM-encoded data")
+	}
+
+	if cert, err := x509.ParseCertificateRequest(block.Bytes); err == nil {
+		return cert, nil
+	}
+	return nil, err
+}
+
 func ParseCertificate(bytes []byte) (*x509.Certificate, error) {
 	var err error
 
