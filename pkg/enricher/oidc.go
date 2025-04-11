@@ -22,7 +22,17 @@ import (
 
 // Recall:
 // - "scope", [OAuth2] a permission to do a thing, like "read", "write", "foo_admin", requested by the client
+//   - [OIDC only, not raw JWT-as-bearer token] recall: scopes are requests (from the client to the auth server) for sets of claims
+//     - the ID Token (for consumption by the client) doesn't mention the requested scopes, but contains the claims resulting from those scopes
+//     - the Access Token (for consumption by the IdP's org's APIs) does contain the scopes requested/granted. This token is often opaque to the client (eg not a JWT). The issuer's API can use those scopes for coarse-grained authz if they want, but there's probably some other mechanism too (other bearer permissions in the access token, UID that can be looked up in access db, etc)
+//   - OIDC standard scopes (and their claims):
+//     - email: email, email_verified
+//     - address: address
+//     - profile: name, family_name, given_name, middle_name, nickname, preferred_username, profile, picture, website, gender, birthdate, zoneinfo, locale, updated_at
+//     - phone: phone_number, phone_number_verified
+//     - openid: sub, auth_time, acr
 // - "claim", [Oauth2] a piece of information about the user; the IdP is claiming that it's true, and if you trust them then it is
+//   - standard claims: iss, sub, aud, iat, nbf, exp, jti
 // OIDC, because it gives authN info via what's meant to be an authZ system, (ab)uses scopes to be permissions to get groups of claims (info) about the user (think of it as the client requesting permission to read certain data about the user, the user consenting during the SSO process, and then the client having authZ to go read it from the /userinfo endpoint)
 // It pre-defines various scopes that give bundles of info about the user [https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims]
 // - "openid" - TODO. Not defined by them, but used eg by Google to mean ?? sub + iss?
