@@ -25,6 +25,7 @@ import (
 //   - [OIDC only, not raw JWT-as-bearer token] recall: scopes are requests (from the client to the auth server) for sets of claims
 //     - the ID Token (for consumption by the client) doesn't mention the requested scopes, but contains the claims resulting from those scopes
 //     - the Access Token (for consumption by the IdP's org's APIs) does contain the scopes requested/granted. This token is often opaque to the client (eg not a JWT). The issuer's API can use those scopes for coarse-grained authz if they want, but there's probably some other mechanism too (other bearer permissions in the access token, UID that can be looked up in access db, etc)
+//       - if the access token is client-readable (a JWT), there is a schema for that (including a first-class scopes field): https://datatracker.ietf.org/doc/html/rfc9068
 //   - OIDC standard scopes (and their claims):
 //     - email: email, email_verified
 //     - address: address
